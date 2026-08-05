@@ -1,0 +1,1083 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<!--
+  ══════════════════════════════════════════════════════════════
+  MONEY GARDEN 🌱 v2 — a tiny, private freelance tracker
+  Made for Christina · August 2026
+
+  v2 adds: plots (client jobs + hourly companies), hour logs,
+  real-hourly-rate math, invoice tracking, waiting/paid status,
+  and the monthly goal meter ($5k goal / $3.5k expenses floor —
+  both editable in the ? panel).
+
+  HOW TO TWEAK: colors live in ":root" (light) and the
+  "prefers-color-scheme: dark" block. Goal, floor, currency:
+  the ? panel in the app. Anything else: ask Claude Code.
+
+  YOUR DATA: stored in this browser on this Mac (localStorage),
+  never sent anywhere. "Back up" downloads a .json — keep those
+  in iCloud. v1 data migrates automatically, nothing is lost.
+  ══════════════════════════════════════════════════════════════
+-->
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Money Garden</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#4A7A47">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌱</text></svg>">
+<style>
+  :root {
+    --bg: #F6F2E7;
+    --card: #FFFDF6;
+    --ink: #33312A;
+    --muted: #6E6A5E;
+    --line: #E7E1D0;
+    --green: #4A7A47;
+    --green-deep: #3E6B3C;
+    --green-soft: #EAF1E4;
+    --terracotta: #A54E28;
+    --amber-soft: #F6E8CF;
+    --amber-ink: #7A5410;
+    --bed-top: #E9EFDD;
+    --bed-soil: #D9CDB4;
+    --shadow: 0 1px 3px rgba(60,55,40,.08), 0 4px 14px rgba(60,55,40,.06);
+    --radius: 16px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #171A14;
+      --card: #21251C;
+      --ink: #EAE7DA;
+      --muted: #A5A896;
+      --line: #343A2D;
+      --green: #3E6B3C;
+      --green-deep: #9CC48B;
+      --green-soft: #2A3325;
+      --terracotta: #E0916A;
+      --amber-soft: #3A311C;
+      --amber-ink: #E3C583;
+      --bed-top: #232A1E;
+      --bed-soil: #2E2A20;
+      --shadow: 0 1px 3px rgba(0,0,0,.3), 0 4px 14px rgba(0,0,0,.2);
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--ink);
+    font-family: ui-rounded, "SF Pro Rounded", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    line-height: 1.45; padding: 28px 20px 80px;
+  }
+  main { max-width: 640px; margin: 0 auto; }
+  button { font: inherit; cursor: pointer; }
+
+  header { margin-bottom: 18px; position: relative; }
+  .title-row { display: flex; align-items: baseline; gap: 10px; }
+  .title-row .sprout { font-size: 26px; }
+  h1 { font-size: 27px; font-weight: 700; margin: 0; outline: none; border-radius: 8px; padding: 2px 6px; margin-left: -6px; min-width: 60px; }
+  h1:hover { background: var(--green-soft); cursor: text; }
+  h1:focus { background: var(--green-soft); box-shadow: 0 0 0 2px var(--green); }
+  .tagline { margin: 2px 0 0 2px; font-size: 13px; color: var(--muted); }
+  #helpBtn { position: absolute; top: 0; right: 0; width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--line); background: var(--card); color: var(--muted); font-size: 16px; font-weight: 600; box-shadow: var(--shadow); }
+  #helpBtn:hover { color: var(--green-deep); border-color: var(--green); }
+
+  /* goal meter */
+  #goal { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); padding: 14px 18px 12px; margin-bottom: 12px; }
+  #goal .top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+  #goal .now { font-size: 26px; font-weight: 600; }
+  #goal .now small { font-size: 13px; font-weight: 400; color: var(--muted); }
+  #goal .target { font-size: 13px; color: var(--muted); }
+  .meter { position: relative; height: 14px; background: var(--green-soft); border-radius: 999px; overflow: visible; }
+  .meter .fill { position: absolute; inset: 0 auto 0 0; background: var(--green); border-radius: 999px; min-width: 0; transition: width .6s ease; }
+  .meter .floor-tick { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--muted); border-radius: 2px; }
+  .meter .floor-lab { position: absolute; top: -20px; transform: translateX(-50%); font-size: 10.5px; color: var(--muted); white-space: nowrap; }
+  #goal .word { margin: 8px 0 0; font-size: 12.5px; color: var(--muted); }
+  @media (prefers-reduced-motion: reduce) { .meter .fill { transition: none; } }
+
+  /* stat tiles */
+  #stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+  .tile { background: var(--card); border-radius: var(--radius); padding: 12px 18px; box-shadow: var(--shadow); }
+  .tile .label { font-size: 12px; color: var(--muted); letter-spacing: .02em; }
+  .tile .value { font-size: 26px; font-weight: 600; margin-top: 2px; }
+  .tile .value small { font-size: 13px; font-weight: 400; color: var(--muted); }
+  .tile .sub { font-size: 12px; color: var(--muted); margin-top: 1px; }
+
+  /* garden bed */
+  #garden { border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; background: linear-gradient(to bottom, var(--bed-top) 0%, var(--bed-top) 74%, var(--bed-soil) 74%); padding: 10px 16px 0; margin-bottom: 14px; min-height: 100px; display: flex; align-items: flex-end; gap: 2px; position: relative; }
+  #garden .bed-label { position: absolute; top: 8px; left: 14px; font-size: 11px; color: var(--muted); letter-spacing: .04em; }
+  .flower { display: inline-block; line-height: 1; cursor: default; padding-bottom: 14px; transform-origin: bottom center; }
+  .flower.pop { animation: pop .5s cubic-bezier(.2,1.6,.4,1); }
+  @keyframes pop { 0% { transform: scale(0); } 100% { transform: scale(1); } }
+  @media (prefers-reduced-motion: reduce) { .flower.pop { animation: none; } }
+  .garden-empty { align-self: center; margin: 24px auto 28px; font-size: 14px; color: var(--muted); }
+  .more-blooms { font-size: 12px; color: var(--muted); padding-bottom: 18px; margin-left: 6px; white-space: nowrap; }
+
+  /* quick add */
+  #add { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); padding: 14px 18px 16px; margin-bottom: 18px; }
+  .chips { display: flex; gap: 8px; margin-bottom: 12px; }
+  .chip { border: 1px solid var(--line); background: var(--bg); color: var(--muted); font-size: 13.5px; padding: 6px 14px; border-radius: 999px; }
+  .chip.on { background: var(--green-soft); color: var(--green-deep); border-color: var(--green); font-weight: 600; }
+  .addForm { display: grid; gap: 10px; align-items: end; }
+  .addForm[hidden] { display: none; }
+  #formMoney { grid-template-columns: 1fr 120px 145px auto; }
+  #formHours { grid-template-columns: 1fr 100px 145px auto; }
+  #formPlot  { grid-template-columns: 1fr auto 120px auto; }
+  @media (max-width: 600px) { .addForm { grid-template-columns: 1fr 1fr !important; } .addForm .wide { grid-column: 1 / -1; } }
+  .field label { display: block; font-size: 11px; color: var(--muted); margin: 0 0 4px 2px; letter-spacing: .03em; }
+  .field input, .field select { width: 100%; font: inherit; font-size: 15px; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; }
+  .field input:focus, .field select:focus { outline: 2px solid var(--green); outline-offset: 0; border-color: transparent; }
+  .amount-wrap { position: relative; }
+  .amount-wrap .cur { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 15px; pointer-events: none; }
+  .amount-wrap input { padding-left: 26px; }
+  .go-btn { font-size: 15px; font-weight: 600; background: var(--green); color: #F0F6EB; border: none; border-radius: 10px; padding: 10px 18px; white-space: nowrap; }
+  .go-btn:hover { filter: brightness(1.07); }
+  .go-btn:active { transform: scale(.97); }
+  .kind-toggle { display: flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .kind-toggle button { border: none; background: var(--bg); color: var(--muted); font-size: 13px; padding: 9px 12px; }
+  .kind-toggle button.on { background: var(--green-soft); color: var(--green-deep); font-weight: 600; }
+  .form-hint { grid-column: 1 / -1; font-size: 12px; color: var(--muted); margin: -2px 2px 0; }
+
+  /* nudge */
+  #nudge[hidden] { display: none; }
+  #nudge { display: flex; align-items: center; gap: 10px; background: var(--green-soft); border-radius: 12px; padding: 10px 14px; margin-bottom: 16px; font-size: 13.5px; }
+  #nudge button.go { font-size: 13px; font-weight: 600; color: var(--green-deep); background: none; border: 1.5px solid var(--green); border-radius: 8px; padding: 4px 10px; }
+  #nudge button.snooze { font-size: 15px; margin-left: auto; color: var(--muted); background: none; border: none; }
+
+  /* plots */
+  .section-head { font-size: 13px; color: var(--muted); margin: 18px 4px 8px; letter-spacing: .02em; }
+  .plot { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); padding: 13px 16px; margin-bottom: 10px; }
+  .plot .head { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+  .plot .head .pemoji { font-size: 19px; }
+  .plot .head .pname { font-size: 15px; font-weight: 600; cursor: pointer; border-radius: 6px; padding: 1px 4px; margin-left: -4px; }
+  .plot .head .pname:hover { background: var(--green-soft); }
+  .pill { font-size: 11.5px; padding: 3px 10px; border-radius: 999px; margin-left: auto; white-space: nowrap; }
+  .pill.growing { background: var(--green-soft); color: var(--green-deep); }
+  .pill.sent { background: var(--amber-soft); color: var(--amber-ink); }
+  .plot .nums { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 8px; }
+  .plot .nums div { min-width: 76px; }
+  .plot .nums .nl { font-size: 11px; color: var(--muted); }
+  .plot .nums .nv { font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .plot .nums .nv small { font-size: 11.5px; font-weight: 400; color: var(--muted); }
+  .plot .acts { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; align-items: center; }
+  .pbtn { font-size: 12.5px; font-weight: 600; color: var(--green-deep); background: none; border: 1.5px solid var(--green); border-radius: 8px; padding: 4px 12px; }
+  .pbtn:hover { background: var(--green-soft); }
+  .pbtn.soft { border-color: var(--line); color: var(--muted); font-weight: 400; }
+  .plot .editZone { margin-top: 10px; display: grid; grid-template-columns: 1fr 130px; gap: 8px; }
+  .plot .editZone input { font: inherit; font-size: 14px; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; width: 100%; }
+  .plot .editRow2 { grid-column: 1 / -1; display: flex; gap: 8px; align-items: center; }
+  .linky { font-size: 12.5px; color: var(--terracotta); background: none; border: none; padding: 4px 6px; }
+  .wilted-toggle { font-size: 12.5px; color: var(--muted); background: none; border: none; text-decoration: underline; text-underline-offset: 3px; margin: 2px 4px 0; }
+
+  /* ledger */
+  .month-head { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; color: var(--muted); margin: 20px 4px 6px; letter-spacing: .02em; }
+  .month-head .subtotal { font-variant-numeric: tabular-nums; }
+  ul.entries { list-style: none; margin: 0; padding: 0; }
+  ul.entries li { background: var(--card); border-radius: 12px; box-shadow: var(--shadow); margin-bottom: 8px; }
+  ul.entries li.waiting { background: transparent; border: 1.5px dashed var(--line); box-shadow: none; }
+  .row { display: flex; align-items: center; gap: 12px; padding: 11px 16px; cursor: pointer; border-radius: 12px; }
+  .row:hover { outline: 1.5px solid var(--green); outline-offset: -1.5px; }
+  .row .emoji { font-size: 20px; }
+  .row .proj { flex: 1; min-width: 0; }
+  .row .proj .name { font-size: 15px; font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .proj .when { font-size: 12px; color: var(--muted); }
+  .row .amt { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .row .wpill { font-size: 11px; background: var(--amber-soft); color: var(--amber-ink); padding: 2px 8px; border-radius: 999px; }
+  .list-empty { text-align: center; color: var(--muted); font-size: 14px; margin: 26px 0; }
+  .editForm { padding: 12px 16px; display: grid; grid-template-columns: 1fr 110px 140px; gap: 8px; }
+  .editForm input { font: inherit; font-size: 14px; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; width: 100%; }
+  .editForm input:focus { outline: 2px solid var(--green); border-color: transparent; }
+  .edit-actions { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; margin-top: 2px; flex-wrap: wrap; }
+  .edit-actions .save { font-size: 13.5px; font-weight: 600; background: var(--green); color: #F0F6EB; border: none; border-radius: 8px; padding: 6px 14px; }
+  .edit-actions .markpaid { font-size: 13.5px; font-weight: 600; color: var(--green-deep); background: none; border: 1.5px solid var(--green); border-radius: 8px; padding: 5px 12px; }
+  .edit-actions .cancel { font-size: 13.5px; color: var(--muted); background: none; border: none; padding: 6px 8px; }
+  .edit-actions .remove { font-size: 13px; color: var(--terracotta); background: none; border: none; margin-left: auto; padding: 6px 8px; }
+  @media (max-width: 600px) { .editForm { grid-template-columns: 1fr 1fr; } .editForm .e-proj { grid-column: 1 / -1; } }
+
+  footer { margin-top: 30px; font-size: 12.5px; color: var(--muted); text-align: center; }
+  footer .meta { display: block; margin-bottom: 8px; }
+  footer button { font-size: 12.5px; color: var(--green-deep); background: none; border: none; padding: 2px 6px; text-decoration: underline; text-underline-offset: 3px; }
+  footer button:hover { color: var(--ink); }
+
+  .overlay { position: fixed; inset: 0; background: rgba(30,28,20,.45); display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 50; }
+  .overlay[hidden] { display: none; }
+  .panel { background: var(--card); border-radius: 18px; box-shadow: var(--shadow); max-width: 480px; width: 100%; max-height: 84vh; overflow-y: auto; padding: 24px 26px; }
+  .panel h2 { font-size: 18px; margin: 0 0 4px; }
+  .panel h3 { font-size: 13.5px; margin: 18px 0 4px; color: var(--green-deep); }
+  .panel p { font-size: 13.5px; margin: 4px 0; }
+  .panel p.soft { color: var(--muted); }
+  .panel .closeX { float: right; font-size: 18px; border: none; background: none; color: var(--muted); }
+  .panel .setrow { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+  .panel .setrow input { font: inherit; font-size: 15px; width: 110px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; color: var(--ink); }
+  .panel .setrow input.tiny { width: 64px; text-align: center; }
+  .panel .setrow span { font-size: 12.5px; color: var(--muted); }
+  .panel .btn { font-size: 13.5px; font-weight: 600; background: var(--green); color: #F0F6EB; border: none; border-radius: 8px; padding: 7px 14px; margin-top: 6px; }
+  .panel .btn.ghost { background: none; color: var(--muted); font-weight: 400; }
+  .confirm-actions { display: flex; gap: 10px; margin-top: 16px; justify-content: flex-end; }
+
+  #toast { position: fixed; bottom: 26px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--bg); border-radius: 12px; padding: 10px 18px; font-size: 14px; display: flex; align-items: center; gap: 14px; z-index: 60; box-shadow: 0 6px 20px rgba(0,0,0,.25); max-width: 90vw; }
+  #toast[hidden] { display: none; }
+  #toast button { font-size: 14px; font-weight: 700; color: #B9DBA9; background: none; border: none; }
+
+  #reconnect { position: fixed; top: 14px; left: 50%; transform: translateX(-50%); background: var(--green-soft); color: var(--ink); border: 1px solid var(--green); border-radius: 999px; padding: 7px 16px; font-size: 13px; z-index: 55; }
+  #reconnect[hidden] { display: none; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="title-row">
+      <span class="sprout">🌱</span>
+      <h1 id="appName" contenteditable="true" spellcheck="false" title="Click to rename your garden"></h1>
+    </div>
+    <p class="tagline">every gig is a seed — tap the title to rename</p>
+    <button id="helpBtn" title="How this works">?</button>
+  </header>
+
+  <section id="goal" aria-label="Monthly goal"></section>
+  <section id="stats" aria-label="Totals"></section>
+  <section id="garden" aria-label="This month's garden"></section>
+
+  <div id="add">
+    <div class="chips" role="tablist">
+      <button class="chip" data-tab="money" role="tab">💵 Money in</button>
+      <button class="chip" data-tab="hours" role="tab">⏱️ Hours</button>
+      <button class="chip" data-tab="plot" role="tab">🪴 New plot</button>
+    </div>
+
+    <form id="formMoney" class="addForm" autocomplete="off">
+      <div class="field wide">
+        <label for="mProject">What was it?</label>
+        <input id="mProject" list="projectList" placeholder="Royalties, sample pack, gig…" required>
+        <datalist id="projectList"></datalist>
+      </div>
+      <div class="field">
+        <label for="mAmount">Amount</label>
+        <div class="amount-wrap"><span class="cur curPrefix">$</span><input id="mAmount" inputmode="decimal" placeholder="0" required></div>
+      </div>
+      <div class="field">
+        <label for="mDate">Date</label>
+        <input id="mDate" type="date" required>
+      </div>
+      <button class="go-btn" type="submit">Plant it 🌱</button>
+    </form>
+
+    <form id="formHours" class="addForm" autocomplete="off" hidden>
+      <div class="field wide">
+        <label for="hPlot">Which plot?</label>
+        <select id="hPlot" required></select>
+      </div>
+      <div class="field">
+        <label for="hHours">Hours</label>
+        <input id="hHours" inputmode="decimal" placeholder="1.5" required>
+      </div>
+      <div class="field">
+        <label for="hDate">Date</label>
+        <input id="hDate" type="date" required>
+      </div>
+      <button class="go-btn" type="submit">Water it 💧</button>
+      <p class="form-hint" id="hoursHint" hidden>No plots yet — tap 🪴 New plot first (a client job or a company you work for).</p>
+    </form>
+
+    <form id="formPlot" class="addForm" autocomplete="off" hidden>
+      <div class="field wide">
+        <label for="pName">Client job or company</label>
+        <input id="pName" placeholder="EP mix — Riverside, or Company A" required>
+      </div>
+      <div class="field">
+        <label>Paid how?</label>
+        <div class="kind-toggle">
+          <button type="button" id="kindFlat" class="on">flat fee</button>
+          <button type="button" id="kindHourly">per hour</button>
+        </div>
+      </div>
+      <div class="field">
+        <label for="pRate" id="pRateLabel">Project rate</label>
+        <div class="amount-wrap"><span class="cur curPrefix">$</span><input id="pRate" inputmode="decimal" placeholder="0" required></div>
+      </div>
+      <button class="go-btn" type="submit">Dig it 🪴</button>
+      <p class="form-hint">Flat fee = one client project. Per hour = ongoing work you invoice (like your companies).</p>
+    </form>
+  </div>
+
+  <div id="nudge" hidden></div>
+
+  <section id="plots" aria-label="Plots"></section>
+  <section id="list" aria-label="Money ledger"></section>
+
+  <footer>
+    <span class="meta" id="metaLine"></span>
+    <button id="backupBtn">Back up</button> ·
+    <button id="csvBtn">Export CSV</button> ·
+    <button id="restoreBtn">Restore</button>
+  </footer>
+</main>
+
+<button id="reconnect" hidden>🔗 Tap to reconnect your save file</button>
+
+<div id="help" class="overlay" hidden>
+  <div class="panel">
+    <button class="closeX" data-close>✕</button>
+    <h2>How your garden works 🌷</h2>
+
+    <h3>The idea</h3>
+    <p>You track two things: <b>money that landed</b> (harvests 🌻) and <b>hours you spent</b> (watering 💧). Plots connect them — each client job or company is a plot, and fee ÷ hours shows what you <i>really</i> earn per hour there.</p>
+
+    <h3>Money only counts when it's real</h3>
+    <p>Invoices and finished jobs sit as “waiting” (dashed, no flower) until you mark them paid. Canceled? Remove it — your totals never lied. The garden only grows on real money.</p>
+
+    <h3>Your goal</h3>
+    <div class="setrow">
+      <input id="goalInput" inputmode="decimal" aria-label="Monthly goal"> <span>monthly goal</span>
+    </div>
+    <div class="setrow">
+      <input id="floorInput" inputmode="decimal" aria-label="Monthly expenses"> <span>baseline expenses (the tick on the bar)</span>
+    </div>
+
+    <h3>Where your numbers live</h3>
+    <p>On this Mac, in this browser. No internet, no account, no tracking. <b>Always open the app in the same browser</b> or it will look empty.</p>
+
+    <h3>The one habit: Back up</h3>
+    <p>Tap <b>Back up</b> monthly, drag the little file into iCloud Drive. The app reminds you gently.</p>
+
+    <h3 id="fsaHead" hidden>Auto-save to a file (extra safety)</h3>
+    <p id="fsaBody" hidden>Pick a spot in iCloud Drive once and the garden saves itself after every change.</p>
+    <button class="btn" id="fsaBtn" hidden>Choose a save file…</button>
+    <p class="soft" id="fsaStatus" hidden></p>
+
+    <h3>Currency</h3>
+    <div class="setrow">
+      <input id="curInput" class="tiny" maxlength="4" aria-label="Currency symbol"> <span>shown before every amount</span>
+    </div>
+
+    <p class="soft" style="margin-top:20px">Made with 🌱 for Christina · v2 · works offline forever</p>
+  </div>
+</div>
+
+<div id="confirm" class="overlay" hidden>
+  <div class="panel">
+    <h2 id="confirmTitle"></h2>
+    <p id="confirmBody"></p>
+    <div class="confirm-actions">
+      <button class="btn ghost" id="confirmNo"></button>
+      <button class="btn" id="confirmYes"></button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" hidden><span id="toastMsg"></span><button id="toastAct" hidden></button></div>
+<input type="file" id="restoreInput" accept=".json,application/json" hidden>
+
+<script>
+"use strict";
+/* ═══════════ helpers ═══════════ */
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+const pad = n => String(n).padStart(2, "0");
+const todayISO = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; };
+const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now() + "-" + Math.random().toString(36).slice(2));
+const daysSince = ts => (Date.now() - ts) / 86400000;
+const hashStr = s => { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return Math.abs(h); };
+
+function fmtMoney(cents, symbol = true) {
+  const whole = Math.round(cents) % 100 === 0;
+  const n = (cents / 100).toLocaleString(undefined, { minimumFractionDigits: whole ? 0 : 2, maximumFractionDigits: 2 });
+  return (symbol ? state.currency : "") + n;
+}
+function fmtHours(h) { return (Math.round(h * 10) / 10).toLocaleString(); }
+function parseAmount(str) {
+  const v = parseFloat(String(str).replace(/[^0-9.,-]/g, "").replace(/,/g, ""));
+  if (!isFinite(v) || v <= 0 || v > 999999999) return null;
+  return Math.round(v * 100);
+}
+function parseHrs(str) {
+  const v = parseFloat(String(str).replace(/[^0-9.,-]/g, "").replace(/,/g, ""));
+  if (!isFinite(v) || v <= 0 || v > 10000) return null;
+  return Math.round(v * 10) / 10;
+}
+function fmtDay(iso) {
+  const [y, m, d] = iso.split("-").map(Number);
+  const opts = { month: "short", day: "numeric" };
+  if (y !== new Date().getFullYear()) opts.year = "numeric";
+  return new Date(y, m - 1, d).toLocaleDateString(undefined, opts);
+}
+function monthLabel(ym) {
+  const [y, m] = ym.split("-").map(Number);
+  return new Date(y, m - 1, 1).toLocaleDateString(undefined, { month: "long", year: "numeric" });
+}
+function download(name, text, type) {
+  const a = document.createElement("a");
+  const url = URL.createObjectURL(new Blob([text], { type }));
+  a.href = url; a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+function flowerFor(amountCents) {
+  const amt = amountCents / 100;
+  if (amt < 50) return "🌱";
+  if (amt < 150) return "🌼";
+  if (amt < 400) return "🌷";
+  if (amt < 1000) return "🌻";
+  return "🌳";
+}
+
+/* ═══════════ state ═══════════ */
+const KEY = "money-garden-v1";
+const DEFAULTS = {
+  v: 2, appName: "Christina's Money Garden", currency: "$",
+  goalCents: 500000, floorCents: 350000,
+  entries: [], plots: [], hours: [],
+  lastBackup: null, lastChange: null, nudgeSnooze: 0, celebrated: {}
+};
+function migrate(s) {
+  const out = { ...DEFAULTS, ...s };
+  if (!s.v || s.v < 2) {
+    out.v = 2;
+    out.entries = (s.entries || []).map(e => ({ status: "paid", ...e }));
+    out.plots = s.plots || []; out.hours = s.hours || [];
+  }
+  out.entries.forEach(e => { if (!e.status) e.status = "paid"; });
+  return out;
+}
+function load() {
+  const raw = localStorage.getItem(KEY);
+  if (!raw) return { ...DEFAULTS };
+  try { return migrate(JSON.parse(raw)); }
+  catch { localStorage.setItem(KEY + "-corrupt-" + Date.now(), raw); return { ...DEFAULTS }; }
+}
+let state = load();
+function persist() { localStorage.setItem(KEY, JSON.stringify(state)); scheduleFileWrite(); }
+function markChanged() { state.lastChange = Date.now(); }
+window.addEventListener("storage", e => { if (e.key === KEY) { state = load(); render(); } });
+
+/* ═══════════ derived ═══════════ */
+const currentYM = () => todayISO().slice(0, 7);
+const paidEntries = () => state.entries.filter(e => e.status === "paid");
+const waitingEntries = () => state.entries.filter(e => e.status === "waiting");
+const sumCents = list => list.reduce((a, e) => a + e.amountCents, 0);
+const plotById = id => state.plots.find(p => p.id === id);
+const plotHours = id => state.hours.filter(h => h.plotId === id).reduce((a, h) => a + h.hours, 0);
+const unbilledHours = id => state.hours.filter(h => h.plotId === id && !h.invoiced).reduce((a, h) => a + h.hours, 0);
+function realHourly(p) {
+  if (p.kind === "hourly") return p.rateCents;
+  const hrs = plotHours(p.id);
+  return hrs > 0 ? Math.round(p.rateCents / hrs) : null;
+}
+
+/* ═══════════ backup / restore / csv ═══════════ */
+function backupData() {
+  return JSON.stringify({ app: "money-garden", version: 2, exportedAt: new Date().toISOString(),
+    appName: state.appName, currency: state.currency, goalCents: state.goalCents, floorCents: state.floorCents,
+    entries: state.entries, plots: state.plots, hours: state.hours }, null, 2);
+}
+function doBackup() {
+  download(`money-garden-backup-${todayISO()}.json`, backupData(), "application/json");
+  state.lastBackup = Date.now();
+  persist(); render();
+  showToast("Backup saved to Downloads 🌦️ — tuck it into iCloud when you can");
+}
+function doCSV() {
+  const q = v => `"${String(v).replace(/"/g, '""')}"`;
+  const money = [...state.entries].sort((a, b) => a.date.localeCompare(b.date))
+    .map(e => [e.date, q(e.project), (e.amountCents / 100).toFixed(2), e.status, q(e.plotId ? (plotById(e.plotId)?.name || "") : "")].join(","));
+  download(`money-garden-money-${todayISO()}.csv`, "﻿Date,Project,Amount,Status,Plot\n" + money.join("\n"), "text/csv");
+  if (state.hours.length) {
+    const hrs = [...state.hours].sort((a, b) => a.date.localeCompare(b.date))
+      .map(h => [h.date, q(plotById(h.plotId)?.name || ""), h.hours, h.invoiced ? "invoiced" : ""].join(","));
+    download(`money-garden-hours-${todayISO()}.csv`, "﻿Date,Plot,Hours,Invoiced\n" + hrs.join("\n"), "text/csv");
+  }
+  showToast(state.hours.length ? "Two CSVs exported: money + hours 🌿" : "CSV exported 🌿");
+}
+function validBackup(o) {
+  return o && Array.isArray(o.entries) && o.entries.every(e =>
+    typeof e.project === "string" && /^\d{4}-\d{2}-\d{2}$/.test(e.date || "") &&
+    (Number.isFinite(e.amountCents) || Number.isFinite(e.amount)));
+}
+async function doRestore(file) {
+  let obj;
+  try { obj = JSON.parse(await file.text()); }
+  catch { showToast("Hmm, that file doesn't look like a Money Garden backup"); return; }
+  if (!validBackup(obj)) { showToast("Hmm, that file doesn't look like a Money Garden backup"); return; }
+  const cur = state.entries.length;
+  const ok = await showConfirm({
+    title: "Restore this backup? 🌷",
+    body: cur ? `This replaces everything here (${cur} money entr${cur === 1 ? "y" : "ies"}) with the backup. A safety copy of the current garden downloads first, so nothing is truly lost.`
+              : `This will plant the backup's ${obj.entries.length} entr${obj.entries.length === 1 ? "y" : "ies"}.`,
+    yes: "Restore", no: "Keep what I have"
+  });
+  if (!ok) return;
+  if (cur) download(`money-garden-before-restore-${todayISO()}.json`, backupData(), "application/json");
+  const restored = migrate({
+    v: obj.version >= 2 ? 2 : 1,
+    appName: obj.appName, currency: obj.currency,
+    goalCents: obj.goalCents, floorCents: obj.floorCents,
+    entries: obj.entries.map(e => ({
+      id: e.id || uid(), project: String(e.project).slice(0, 120),
+      amountCents: Number.isFinite(e.amountCents) ? Math.round(e.amountCents) : Math.round(e.amount * 100),
+      date: e.date, createdAt: e.createdAt || Date.now(),
+      status: e.status === "waiting" ? "waiting" : "paid",
+      plotId: e.plotId, hourIds: e.hourIds
+    })),
+    plots: Array.isArray(obj.plots) ? obj.plots : [],
+    hours: Array.isArray(obj.hours) ? obj.hours : []
+  });
+  state = { ...state, ...restored, lastChange: Date.now() };
+  persist(); render();
+  showToast("Garden restored 🌷");
+}
+
+/* ═══════════ auto-save file (Chrome/Edge) ═══════════ */
+let fileHandle = null, autosaveOn = false, writeTimer = null;
+const idb = {
+  open: () => new Promise((res, rej) => { const r = indexedDB.open("money-garden-fsa", 1);
+    r.onupgradeneeded = () => r.result.createObjectStore("kv");
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }),
+  get: async k => { const db = await idb.open(); return new Promise((res, rej) => { const t = db.transaction("kv").objectStore("kv").get(k); t.onsuccess = () => res(t.result); t.onerror = () => rej(t.error); }); },
+  set: async (k, v) => { const db = await idb.open(); return new Promise((res, rej) => { const t = db.transaction("kv", "readwrite").objectStore("kv").put(v, k); t.onsuccess = () => res(); t.onerror = () => rej(t.error); }); },
+  del: async k => { const db = await idb.open(); return new Promise((res, rej) => { const t = db.transaction("kv", "readwrite").objectStore("kv").delete(k); t.onsuccess = () => res(); t.onerror = () => rej(t.error); }); }
+};
+const fsaSupported = "showSaveFilePicker" in window;
+async function writeToFile() {
+  if (!fileHandle || !autosaveOn) return;
+  try {
+    const w = await fileHandle.createWritable();
+    await w.write(backupData()); await w.close();
+    state.lastBackup = Date.now();
+    localStorage.setItem(KEY, JSON.stringify(state));
+    renderMeta(); renderNudge();
+  } catch { showToast("Couldn't reach the save file — your data is still safe here"); }
+}
+function scheduleFileWrite() { if (!autosaveOn) return; clearTimeout(writeTimer); writeTimer = setTimeout(writeToFile, 900); }
+async function initAutosave() {
+  if (!fsaSupported) return;
+  $("#fsaHead").hidden = $("#fsaBody").hidden = $("#fsaBtn").hidden = false;
+  try { fileHandle = await idb.get("handle"); } catch { fileHandle = null; }
+  if (!fileHandle) { updateFsaUI(); return; }
+  const perm = await fileHandle.queryPermission({ mode: "readwrite" });
+  if (perm === "granted") autosaveOn = true; else $("#reconnect").hidden = false;
+  updateFsaUI(); renderMeta(); renderNudge();
+}
+async function enableAutosave() {
+  try {
+    fileHandle = await showSaveFilePicker({ suggestedName: "Money Garden Data.json",
+      types: [{ description: "Money Garden backup", accept: { "application/json": [".json"] } }] });
+    await idb.set("handle", fileHandle);
+    autosaveOn = true; await writeToFile();
+    updateFsaUI(); renderMeta(); renderNudge();
+    showToast("Auto-save is on — your garden now waters itself 💧");
+  } catch {}
+}
+async function disableAutosave() {
+  autosaveOn = false; fileHandle = null;
+  try { await idb.del("handle"); } catch {}
+  updateFsaUI(); renderMeta(); renderNudge();
+}
+function updateFsaUI() {
+  if (!fsaSupported) return;
+  $("#fsaStatus").hidden = false;
+  if (autosaveOn) { $("#fsaBtn").textContent = "Turn off auto-save"; $("#fsaBtn").onclick = disableAutosave; $("#fsaStatus").textContent = "✓ auto-saving after every change"; }
+  else { $("#fsaBtn").textContent = "Choose a save file…"; $("#fsaBtn").onclick = enableAutosave; $("#fsaStatus").textContent = fileHandle ? "paused — tap the chip up top to reconnect" : "currently off"; }
+}
+$("#reconnect").addEventListener("click", async () => {
+  if (!fileHandle) { $("#reconnect").hidden = true; return; }
+  const perm = await fileHandle.requestPermission({ mode: "readwrite" });
+  if (perm === "granted") { autosaveOn = true; $("#reconnect").hidden = true; await writeToFile(); updateFsaUI(); showToast("Save file reconnected 🔗"); }
+});
+
+/* ═══════════ toast + confirm ═══════════ */
+let toastTimer = null;
+function showToast(msg, opts = {}) {
+  const t = $("#toast"), act = $("#toastAct");
+  $("#toastMsg").textContent = msg;
+  if (opts.actionLabel) { act.hidden = false; act.textContent = opts.actionLabel; act.onclick = () => { hideToast(); opts.onAction(); }; }
+  else { act.hidden = true; act.onclick = null; }
+  t.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(hideToast, opts.ms || (opts.actionLabel ? 6500 : 3500));
+}
+function hideToast() { $("#toast").hidden = true; }
+function showConfirm({ title, body, yes, no }) {
+  return new Promise(resolve => {
+    $("#confirmTitle").textContent = title; $("#confirmBody").textContent = body;
+    $("#confirmYes").textContent = yes; $("#confirmNo").textContent = no;
+    const box = $("#confirm"); box.hidden = false;
+    const done = v => { box.hidden = true; resolve(v); };
+    $("#confirmYes").onclick = () => done(true);
+    $("#confirmNo").onclick = () => done(false);
+    box.onclick = e => { if (e.target === box) done(false); };
+  });
+}
+
+/* ═══════════ celebrations ═══════════ */
+function checkMilestones() {
+  const ym = currentYM();
+  const paid = sumCents(paidEntries().filter(e => e.date.startsWith(ym)));
+  const c = state.celebrated[ym] || (state.celebrated[ym] = {});
+  if (!c.floor && paid >= state.floorCents && state.floorCents > 0) {
+    c.floor = true; persist();
+    showToast("Your expenses are covered this month 🌱 everything from here is growth");
+  } else if (!c.goal && paid >= state.goalCents && state.goalCents > 0) {
+    c.goal = true; persist();
+    showToast("Goal reached — full bloom 🌸 the low-payers can wait");
+  }
+}
+
+/* ═══════════ rendering ═══════════ */
+let editingId = null, lastAddedId = null, currentTab = "money", plotEditId = null, showWilted = false;
+
+function render() {
+  renderTitle(); renderGoal(); renderStats(); renderGarden();
+  renderTabs(); renderPlotSelect(); renderPlots(); renderList();
+  renderDatalist(); renderMeta(); renderNudge();
+  $$(".curPrefix").forEach(el => el.textContent = state.currency);
+  $("#curInput").value = state.currency;
+  $("#goalInput").value = (state.goalCents / 100).toLocaleString();
+  $("#floorInput").value = (state.floorCents / 100).toLocaleString();
+}
+function renderTitle() {
+  const h = $("#appName");
+  if (h.textContent !== state.appName && document.activeElement !== h) h.textContent = state.appName;
+  document.title = state.appName.replace(/^Christina.?s\s+/i, "") || "Money Garden";
+}
+function renderGoal() {
+  const ym = currentYM();
+  const paid = sumCents(paidEntries().filter(e => e.date.startsWith(ym)));
+  const goal = state.goalCents, floor = state.floorCents;
+  const pct = goal > 0 ? Math.min(paid / goal, 1) : 0;
+  const floorPct = goal > 0 ? Math.min(floor / goal, 1) : 0;
+  let word;
+  if (goal <= 0) word = "";
+  else if (paid >= goal) word = "Full bloom 🌸 — anything more this month is pure choice. Guard your time.";
+  else if (floor > 0 && paid >= floor) word = `Expenses covered 🌱 — ${fmtMoney(goal - paid)} to full bloom`;
+  else if (floor > 0) word = `${fmtMoney(floor - paid)} until your expenses are covered`;
+  else word = `${fmtMoney(goal - paid)} to go`;
+  const monthName = new Date().toLocaleDateString(undefined, { month: "long" });
+  $("#goal").innerHTML = `
+    <div class="top">
+      <span class="now">${esc(fmtMoney(paid))} <small>harvested in ${esc(monthName)}</small></span>
+      <span class="target">goal ${esc(fmtMoney(goal))}</span>
+    </div>
+    <div class="meter" role="img" aria-label="Progress: ${esc(fmtMoney(paid))} of ${esc(fmtMoney(goal))}">
+      <div class="fill" style="width:${(pct * 100).toFixed(1)}%"></div>
+      ${floor > 0 && floor < goal ? `<div class="floor-tick" style="left:${(floorPct * 100).toFixed(1)}%"></div>
+      <div class="floor-lab" style="left:${(floorPct * 100).toFixed(1)}%">expenses ${esc(fmtMoney(floor))}</div>` : ""}
+    </div>
+    <p class="word">${word}</p>`;
+}
+function renderStats() {
+  const ym = currentYM();
+  const hrsThisMonth = state.hours.filter(h => h.date.startsWith(ym)).reduce((a, h) => a + h.hours, 0);
+  const plotPaid = sumCents(paidEntries().filter(e => e.date.startsWith(ym) && e.plotId));
+  const rate = hrsThisMonth > 0 ? Math.round(plotPaid / hrsThisMonth) : null;
+  const waitSum = sumCents(waitingEntries());
+  const waitN = waitingEntries().length;
+  $("#stats").innerHTML = `
+    <div class="tile"><div class="label">Per hour worked</div>
+      <div class="value">${rate !== null ? esc(fmtMoney(rate)) + "<small>/hr</small>" : "—"}</div>
+      <div class="sub">${hrsThisMonth > 0 ? esc(fmtHours(hrsThisMonth)) + " hrs watered this month" : "log hours to see this"}</div></div>
+    <div class="tile"><div class="label">Waiting to be paid</div>
+      <div class="value">${esc(fmtMoney(waitSum))}</div>
+      <div class="sub">${waitN ? waitN + " harvest" + (waitN === 1 ? "" : "s") + " on the way" : "nothing pending"}</div></div>`;
+}
+function renderGarden() {
+  const ym = currentYM();
+  const monthPaid = paidEntries().filter(e => e.date.startsWith(ym))
+    .sort((a, b) => a.date.localeCompare(b.date) || (a.createdAt - b.createdAt));
+  const g = $("#garden");
+  const label = `<span class="bed-label">this month's garden — real money only</span>`;
+  if (!monthPaid.length) {
+    g.innerHTML = label + `<span class="garden-empty">${state.entries.length ? "The bed is ready for this month 🌤️" : "Plant your first income below 🌱"}</span>`;
+    return;
+  }
+  const MAX = 24;
+  const shown = monthPaid.slice(-MAX);
+  const flowers = shown.map(e => {
+    const amt = e.amountCents / 100;
+    const size = amt < 50 ? 22 : amt < 150 ? 27 : amt < 400 ? 33 : amt < 1000 ? 40 : 46;
+    const jit = hashStr(e.id) % 7;
+    return `<span class="flower${e.id === lastAddedId ? " pop" : ""}" style="font-size:${size}px; transform: translateY(-${jit}px)" title="${esc(e.project)} · ${esc(fmtMoney(e.amountCents))}">${flowerFor(e.amountCents)}</span>`;
+  }).join("");
+  const more = monthPaid.length > MAX ? `<span class="more-blooms">+${monthPaid.length - MAX} more</span>` : "";
+  g.innerHTML = label + flowers + more;
+  lastAddedId = null;
+}
+function renderTabs() {
+  $$(".chip").forEach(c => c.classList.toggle("on", c.dataset.tab === currentTab));
+  $("#formMoney").hidden = currentTab !== "money";
+  $("#formHours").hidden = currentTab !== "hours";
+  $("#formPlot").hidden = currentTab !== "plot";
+}
+function renderPlotSelect(keep) {
+  const sel = $("#hPlot");
+  const active = state.plots.filter(p => p.status !== "canceled" && p.status !== "paid");
+  const val = keep || sel.value;
+  sel.innerHTML = active.map(p => `<option value="${esc(p.id)}">${esc(p.name)}${p.kind === "hourly" ? ` · ${esc(fmtMoney(p.rateCents))}/hr` : ""}</option>`).join("");
+  if (val && active.some(p => p.id === val)) sel.value = val;
+  $("#hoursHint").hidden = active.length > 0;
+  sel.disabled = active.length === 0;
+}
+function renderDatalist() {
+  const seen = new Set();
+  $("#projectList").innerHTML = [...state.entries].sort((a, b) => b.createdAt - a.createdAt)
+    .filter(e => !e.plotId)
+    .map(e => e.project).filter(p => !seen.has(p) && seen.add(p)).slice(0, 20)
+    .map(p => `<option value="${esc(p)}">`).join("");
+}
+function plotCard(p) {
+  const hrs = plotHours(p.id);
+  const rh = realHourly(p);
+  const editing = p.id === plotEditId;
+  let numsHtml, actsHtml, pill, emoji;
+  if (p.kind === "hourly") {
+    emoji = "🌿";
+    const un = unbilledHours(p.id);
+    pill = un > 0 ? `<span class="pill growing">${esc(fmtHours(un))} hrs to invoice</span>` : `<span class="pill growing">growing</span>`;
+    numsHtml = `
+      <div><div class="nl">rate</div><div class="nv">${esc(fmtMoney(p.rateCents))}<small>/hr</small></div></div>
+      <div><div class="nl">hours ever</div><div class="nv">${esc(fmtHours(hrs))}</div></div>
+      <div><div class="nl">unbilled</div><div class="nv">${esc(fmtMoney(Math.round(un * p.rateCents)))}</div></div>`;
+    actsHtml = `<button class="pbtn" data-act="water">+ hours</button>
+      ${un > 0 ? `<button class="pbtn" data-act="invoice">Invoice these →</button>` : ""}
+      <button class="pbtn soft" data-act="edit">edit</button>`;
+  } else {
+    emoji = "🪴";
+    pill = p.status === "sent" ? `<span class="pill sent">sent · waiting</span>` : `<span class="pill growing">growing</span>`;
+    numsHtml = `
+      <div><div class="nl">project rate</div><div class="nv">${esc(fmtMoney(p.rateCents))}</div></div>
+      <div><div class="nl">hours so far</div><div class="nv">${esc(fmtHours(hrs))}</div></div>
+      <div><div class="nl">real hourly</div><div class="nv">${rh !== null ? esc(fmtMoney(rh)) + "<small>/hr</small>" : "—"}</div></div>`;
+    actsHtml = `<button class="pbtn" data-act="water">+ hours</button>
+      ${p.status === "growing" ? `<button class="pbtn" data-act="send">Mark sent 🌸</button>` : ""}
+      ${p.status === "sent" ? `<button class="pbtn" data-act="paid">Mark paid 🌻</button>` : ""}
+      <button class="pbtn soft" data-act="edit">edit</button>`;
+  }
+  const editZone = editing ? `
+    <div class="editZone">
+      <input class="pe-name" value="${esc(p.name)}" aria-label="Plot name">
+      <input class="pe-rate" value="${(p.rateCents / 100)}" inputmode="decimal" aria-label="Rate">
+      <div class="editRow2">
+        <button class="pbtn" data-act="saveEdit">Save</button>
+        <button class="pbtn soft" data-act="cancelEdit">Cancel</button>
+        <button class="linky" data-act="wilt" style="margin-left:auto">cancel this job 🥀</button>
+        <button class="linky" data-act="deletePlot">delete</button>
+      </div>
+    </div>` : "";
+  return `<div class="plot" data-plot="${esc(p.id)}">
+    <div class="head"><span class="pemoji">${emoji}</span>
+      <span class="pname" data-act="edit" title="Edit this plot">${esc(p.name)}</span>${pill}</div>
+    <div class="nums">${numsHtml}</div>
+    ${editing ? editZone : `<div class="acts">${actsHtml}</div>`}
+  </div>`;
+}
+function renderPlots() {
+  const sec = $("#plots");
+  const active = state.plots.filter(p => p.status === "growing" || p.status === "sent");
+  const wilted = state.plots.filter(p => p.status === "canceled");
+  if (!active.length && !wilted.length) { sec.innerHTML = ""; return; }
+  active.sort((a, b) => (realHourly(b) ?? -1) - (realHourly(a) ?? -1));
+  let html = active.length ? `<h2 class="section-head">Plots — sorted by what pays best</h2>` + active.map(plotCard).join("") : "";
+  if (wilted.length) {
+    html += `<button class="wilted-toggle" id="wiltedToggle">${showWilted ? "hide" : "show"} wilted plots 🥀 (${wilted.length})</button>`;
+    if (showWilted) html += wilted.map(p => `<div class="plot" style="opacity:.65" data-plot="${esc(p.id)}">
+      <div class="head"><span class="pemoji">🥀</span><span class="pname">${esc(p.name)}</span>
+      <span class="pill sent">canceled · ${esc(fmtHours(plotHours(p.id)))} hrs spent</span></div>
+      <div class="acts"><button class="linky" data-act="deletePlot">delete forever</button></div></div>`).join("");
+  }
+  sec.innerHTML = html;
+  const t = $("#wiltedToggle");
+  if (t) t.onclick = () => { showWilted = !showWilted; renderPlots(); };
+}
+function renderList() {
+  const list = $("#list");
+  if (!state.entries.length) { list.innerHTML = `<p class="list-empty">No seeds yet — your first one takes five seconds 🌱</p>`; return; }
+  const sorted = [...state.entries].sort((a, b) => b.date.localeCompare(a.date) || (b.createdAt - a.createdAt));
+  const groups = new Map();
+  for (const e of sorted) {
+    const ym = e.date.slice(0, 7);
+    if (!groups.has(ym)) groups.set(ym, []);
+    groups.get(ym).push(e);
+  }
+  let html = `<h2 class="section-head">Harvest ledger</h2>`;
+  for (const [ym, entries] of groups) {
+    const paidSum = sumCents(entries.filter(e => e.status === "paid"));
+    const waitSum = sumCents(entries.filter(e => e.status === "waiting"));
+    html += `<div class="month-head"><span>${esc(monthLabel(ym))}</span>
+      <span class="subtotal">${esc(fmtMoney(paidSum))}${waitSum ? ` <span style="opacity:.7">(+${esc(fmtMoney(waitSum))} waiting)</span>` : ""}</span></div><ul class="entries">`;
+    for (const e of entries) {
+      if (e.id === editingId) {
+        html += `<li data-id="${esc(e.id)}"><form class="editForm">
+          <input class="e-proj" value="${esc(e.project)}" aria-label="Project" required>
+          <input class="e-amt" value="${(e.amountCents / 100)}" inputmode="decimal" aria-label="Amount" required>
+          <input class="e-date" type="date" value="${esc(e.date)}" required>
+          <div class="edit-actions">
+            <button type="submit" class="save">Save</button>
+            ${e.status === "waiting" ? `<button type="button" class="markpaid">Mark paid 🌻</button>` : ""}
+            <button type="button" class="cancel">Cancel</button>
+            <button type="button" class="remove">remove 🥀</button>
+          </div></form></li>`;
+      } else {
+        const waiting = e.status === "waiting";
+        html += `<li data-id="${esc(e.id)}" class="${waiting ? "waiting" : ""}">
+          <div class="row" role="button" tabindex="0" aria-label="Edit ${esc(e.project)}">
+          <span class="emoji">${waiting ? "🌸" : flowerFor(e.amountCents)}</span>
+          <div class="proj"><div class="name">${esc(e.project)}</div><div class="when">${esc(fmtDay(e.date))}</div></div>
+          ${waiting ? `<span class="wpill">waiting</span>` : ""}
+          <span class="amt">${esc(fmtMoney(e.amountCents))}</span></div></li>`;
+      }
+    }
+    html += `</ul>`;
+  }
+  list.innerHTML = html;
+  const editEl = list.querySelector(".editForm .e-proj");
+  if (editEl) editEl.focus();
+}
+function renderMeta() {
+  const n = state.entries.length;
+  const allTime = sumCents(paidEntries());
+  let backup;
+  if (autosaveOn) backup = "auto-saving to your file ✓";
+  else if (!state.lastBackup) backup = "not backed up yet";
+  else { const d = Math.floor(daysSince(state.lastBackup)); backup = d === 0 ? "backed up today" : d === 1 ? "backed up yesterday" : `backed up ${d} days ago`; }
+  $("#metaLine").textContent = `${fmtMoney(allTime)} all time · ${n} seed${n === 1 ? "" : "s"} · saved privately on this Mac · ${backup}`;
+}
+function renderNudge() {
+  const el = $("#nudge");
+  const needs = state.entries.length > 0 && !autosaveOn && Date.now() > (state.nudgeSnooze || 0) && (
+    (!state.lastBackup && state.entries.length >= 3) ||
+    (state.lastBackup && state.lastChange > state.lastBackup && daysSince(state.lastBackup) >= 14));
+  if (!needs) { el.hidden = true; return; }
+  el.hidden = false;
+  el.innerHTML = `<span>🌦️ Time for a tiny backup — one tap keeps your garden safe.</span>
+    <button class="go">Back up now</button><button class="snooze" title="Remind me next week">✕</button>`;
+  el.querySelector(".go").onclick = doBackup;
+  el.querySelector(".snooze").onclick = () => { state.nudgeSnooze = Date.now() + 7 * 86400000; persist(); renderNudge(); };
+}
+
+/* ═══════════ quick add ═══════════ */
+$$(".chip").forEach(c => c.addEventListener("click", () => { currentTab = c.dataset.tab; renderTabs(); }));
+
+$("#formMoney").addEventListener("submit", e => {
+  e.preventDefault();
+  const project = $("#mProject").value.trim();
+  const cents = parseAmount($("#mAmount").value);
+  const date = $("#mDate").value;
+  if (!project || !cents || !date) { showToast(!cents && project ? "The amount needs to be a number above zero 🌵" : "Fill in all three little boxes 🌵"); return; }
+  const entry = { id: uid(), project: project.slice(0, 120), amountCents: cents, date, createdAt: Date.now(), status: "paid" };
+  state.entries.push(entry);
+  lastAddedId = entry.id;
+  markChanged(); persist(); render(); checkMilestones();
+  $("#mProject").value = ""; $("#mAmount").value = ""; $("#mProject").focus();
+  showToast(`Planted 🌷 ${fmtMoney(cents)} for “${project}”`);
+});
+
+$("#formHours").addEventListener("submit", e => {
+  e.preventDefault();
+  const plotId = $("#hPlot").value;
+  const hrs = parseHrs($("#hHours").value);
+  const date = $("#hDate").value;
+  const p = plotById(plotId);
+  if (!p || !hrs || !date) { showToast(!hrs ? "Hours needs to be a number above zero 🌵" : "Pick a plot and a date 🌵"); return; }
+  state.hours.push({ id: uid(), plotId, hours: hrs, date, createdAt: Date.now(), invoiced: false });
+  markChanged(); persist(); render();
+  $("#hHours").value = ""; $("#hHours").focus();
+  const rh = realHourly(p);
+  showToast(p.kind === "flat" && rh !== null
+    ? `Watered 💧 ${fmtHours(hrs)} hrs on “${p.name}” — real hourly now ${fmtMoney(rh)}/hr`
+    : `Watered 💧 ${fmtHours(hrs)} hrs on “${p.name}”`);
+});
+
+let plotKind = "flat";
+$("#kindFlat").addEventListener("click", () => { plotKind = "flat"; syncKind(); });
+$("#kindHourly").addEventListener("click", () => { plotKind = "hourly"; syncKind(); });
+function syncKind() {
+  $("#kindFlat").classList.toggle("on", plotKind === "flat");
+  $("#kindHourly").classList.toggle("on", plotKind === "hourly");
+  $("#pRateLabel").textContent = plotKind === "flat" ? "Project rate" : "Hourly rate";
+}
+$("#formPlot").addEventListener("submit", e => {
+  e.preventDefault();
+  const name = $("#pName").value.trim();
+  const rate = parseAmount($("#pRate").value);
+  if (!name || !rate) { showToast("A name and a rate — that's all it needs 🌵"); return; }
+  const p = { id: uid(), name: name.slice(0, 80), kind: plotKind, rateCents: rate, status: "growing", createdAt: Date.now() };
+  state.plots.push(p);
+  markChanged(); persist(); render();
+  $("#pName").value = ""; $("#pRate").value = "";
+  currentTab = "hours"; renderTabs(); renderPlotSelect(p.id);
+  showToast(`New plot dug 🪴 “${p.name}” — water it with hours as you work`);
+});
+
+/* ═══════════ plot actions ═══════════ */
+$("#plots").addEventListener("click", async e => {
+  const card = e.target.closest("[data-plot]");
+  if (!card) return;
+  const p = plotById(card.dataset.plot);
+  if (!p) return;
+  const act = e.target.dataset.act;
+  if (act === "water") { currentTab = "hours"; renderTabs(); renderPlotSelect(p.id); $("#hHours").focus(); return; }
+  if (act === "edit") { plotEditId = p.id; renderPlots(); return; }
+  if (act === "cancelEdit") { plotEditId = null; renderPlots(); return; }
+  if (act === "saveEdit") {
+    const name = card.querySelector(".pe-name").value.trim();
+    const rate = parseAmount(card.querySelector(".pe-rate").value);
+    if (!name || !rate) { showToast("A name and a rate — that's all it needs 🌵"); return; }
+    p.name = name.slice(0, 80); p.rateCents = rate;
+    plotEditId = null;
+    markChanged(); persist(); render();
+    showToast("Updated 🌿"); return;
+  }
+  if (act === "send") {
+    p.status = "sent";
+    const entry = { id: uid(), project: p.name.slice(0, 120), amountCents: p.rateCents, date: todayISO(), createdAt: Date.now(), status: "waiting", plotId: p.id };
+    state.entries.push(entry);
+    markChanged(); persist(); render();
+    showToast(`Sent 🌸 ${fmtMoney(p.rateCents)} now waiting — mark it paid when it lands`); return;
+  }
+  if (act === "paid") {
+    const w = state.entries.find(en => en.plotId === p.id && en.status === "waiting");
+    if (w) { w.status = "paid"; w.date = todayISO(); lastAddedId = w.id; }
+    else { const en = { id: uid(), project: p.name.slice(0, 120), amountCents: p.rateCents, date: todayISO(), createdAt: Date.now(), status: "paid", plotId: p.id }; state.entries.push(en); lastAddedId = en.id; }
+    p.status = "paid"; p.closedAt = Date.now();
+    markChanged(); persist(); render(); checkMilestones();
+    const rh = realHourly(p);
+    showToast(rh !== null ? `Harvested 🌻 ${fmtMoney(p.rateCents)} — that job paid ${fmtMoney(rh)}/hr` : `Harvested 🌻 ${fmtMoney(p.rateCents)}`); return;
+  }
+  if (act === "invoice") {
+    const un = state.hours.filter(h => h.plotId === p.id && !h.invoiced);
+    const hrs = un.reduce((a, h) => a + h.hours, 0);
+    if (!hrs) return;
+    const amount = Math.round(hrs * p.rateCents);
+    const ok = await showConfirm({
+      title: "Invoice these hours? 🧾",
+      body: `${fmtHours(hrs)} hours × ${fmtMoney(p.rateCents)}/hr = ${fmtMoney(amount)} for “${p.name}”. It'll sit as waiting until you mark it paid.`,
+      yes: "Yes, invoiced", no: "Not yet"
+    });
+    if (!ok) return;
+    un.forEach(h => h.invoiced = true);
+    state.entries.push({ id: uid(), project: `${p.name} — ${fmtHours(hrs)} hrs`.slice(0, 120), amountCents: amount, date: todayISO(), createdAt: Date.now(), status: "waiting", plotId: p.id, hourIds: un.map(h => h.id) });
+    markChanged(); persist(); render();
+    showToast(`Invoice noted 🧾 ${fmtMoney(amount)} waiting to be paid`); return;
+  }
+  if (act === "wilt") {
+    const ok = await showConfirm({ title: "Cancel this job? 🥀",
+      body: `“${p.name}” will move to wilted plots. Its ${fmtHours(plotHours(p.id))} logged hours stay — honest data about where time went. Any waiting money for it is removed.`,
+      yes: "Cancel the job", no: "Keep it" });
+    if (!ok) return;
+    p.status = "canceled"; p.closedAt = Date.now();
+    state.entries = state.entries.filter(en => !(en.plotId === p.id && en.status === "waiting"));
+    plotEditId = null;
+    markChanged(); persist(); render();
+    showToast("Wilted 🥀 — its hours are kept, its money never counted"); return;
+  }
+  if (act === "deletePlot") {
+    const ok = await showConfirm({ title: "Delete this plot forever?",
+      body: `“${p.name}” and its ${fmtHours(plotHours(p.id))} logged hours will be gone. Paid money already in the ledger stays.`,
+      yes: "Delete", no: "Keep it" });
+    if (!ok) return;
+    state.plots = state.plots.filter(x => x.id !== p.id);
+    state.hours = state.hours.filter(h => h.plotId !== p.id);
+    state.entries = state.entries.filter(en => !(en.plotId === p.id && en.status === "waiting"));
+    plotEditId = null;
+    markChanged(); persist(); render();
+    showToast("Plot removed"); return;
+  }
+});
+
+/* ═══════════ ledger actions ═══════════ */
+$("#list").addEventListener("click", e => {
+  const li = e.target.closest("li[data-id]");
+  if (!li) return;
+  const id = li.dataset.id;
+  if (e.target.closest(".row")) { editingId = id; renderList(); return; }
+  if (e.target.classList.contains("cancel")) { editingId = null; renderList(); return; }
+  if (e.target.classList.contains("remove")) { removeEntry(id); return; }
+  if (e.target.classList.contains("markpaid")) {
+    const en = state.entries.find(x => x.id === id);
+    if (!en) return;
+    en.status = "paid"; en.date = todayISO(); lastAddedId = en.id;
+    const p = en.plotId ? plotById(en.plotId) : null;
+    if (p && p.kind === "flat") { p.status = "paid"; p.closedAt = Date.now(); }
+    editingId = null;
+    markChanged(); persist(); render(); checkMilestones();
+    showToast(`Harvested 🌻 ${fmtMoney(en.amountCents)}`); return;
+  }
+});
+$("#list").addEventListener("keydown", e => {
+  if (e.key === "Enter" && e.target.classList.contains("row")) { editingId = e.target.closest("li").dataset.id; renderList(); }
+  if (e.key === "Escape" && editingId) { editingId = null; renderList(); }
+});
+$("#list").addEventListener("submit", e => {
+  e.preventDefault();
+  const li = e.target.closest("li[data-id]");
+  const entry = state.entries.find(x => x.id === li.dataset.id);
+  if (!entry) return;
+  const project = li.querySelector(".e-proj").value.trim();
+  const cents = parseAmount(li.querySelector(".e-amt").value);
+  const date = li.querySelector(".e-date").value;
+  if (!project || !cents || !date) { showToast("Fill in all three little boxes 🌵"); return; }
+  Object.assign(entry, { project: project.slice(0, 120), amountCents: cents, date });
+  editingId = null;
+  markChanged(); persist(); render(); checkMilestones();
+  showToast("Updated 🌿");
+});
+function removeEntry(id) {
+  const idx = state.entries.findIndex(x => x.id === id);
+  if (idx === -1) return;
+  const [gone] = state.entries.splice(idx, 1);
+  let unbilledRestored = false;
+  if (gone.status === "waiting" && gone.hourIds) {
+    state.hours.forEach(h => { if (gone.hourIds.includes(h.id)) { h.invoiced = false; unbilledRestored = true; } });
+  }
+  editingId = null;
+  markChanged(); persist(); render();
+  showToast(`Removed “${gone.project}”${unbilledRestored ? " — its hours are unbilled again" : ""}`, {
+    actionLabel: "Undo",
+    onAction: () => {
+      state.entries.push(gone);
+      if (gone.hourIds) state.hours.forEach(h => { if (gone.hourIds.includes(h.id)) h.invoiced = true; });
+      markChanged(); persist(); render(); showToast("Back in the garden 🌷");
+    }
+  });
+}
+
+/* ═══════════ title, help, settings ═══════════ */
+const titleEl = $("#appName");
+titleEl.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); titleEl.blur(); } });
+titleEl.addEventListener("blur", () => {
+  state.appName = (titleEl.textContent.replace(/\n/g, " ").trim().slice(0, 48)) || DEFAULTS.appName;
+  persist(); renderTitle();
+});
+$("#helpBtn").addEventListener("click", () => { $("#help").hidden = false; });
+$("#help").addEventListener("click", e => { if (e.target === $("#help") || e.target.hasAttribute("data-close")) $("#help").hidden = true; });
+document.addEventListener("keydown", e => { if (e.key === "Escape") $("#help").hidden = true; });
+$("#curInput").addEventListener("change", () => {
+  state.currency = $("#curInput").value.trim().slice(0, 4) || "$";
+  markChanged(); persist(); render();
+});
+$("#goalInput").addEventListener("change", () => {
+  const v = parseAmount($("#goalInput").value);
+  if (v) { state.goalCents = v; markChanged(); persist(); render(); showToast(`Goal set: ${fmtMoney(v)} a month 🌸`); }
+});
+$("#floorInput").addEventListener("change", () => {
+  const v = parseAmount($("#floorInput").value);
+  if (v) { state.floorCents = v; markChanged(); persist(); render(); showToast(`Expenses line set at ${fmtMoney(v)} 🌱`); }
+});
+$("#backupBtn").addEventListener("click", doBackup);
+$("#csvBtn").addEventListener("click", doCSV);
+$("#restoreBtn").addEventListener("click", () => $("#restoreInput").click());
+$("#restoreInput").addEventListener("change", e => { if (e.target.files[0]) doRestore(e.target.files[0]); e.target.value = ""; });
+
+/* ═══════════ boot ═══════════ */
+$("#mDate").value = todayISO();
+$("#hDate").value = todayISO();
+render();
+initAutosave();
+</script>
+<script>
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
+</script>
+</body>
+</html>
