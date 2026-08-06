@@ -76,7 +76,7 @@
   button { font: inherit; cursor: pointer; }
 
   header { margin-bottom: 18px; position: relative; }
-  .title-row { display: flex; align-items: baseline; gap: 10px; }
+  .title-row { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; padding-right: 42px; }
   .title-row .sprout { font-size: 26px; }
   h1 { font-size: 27px; font-weight: 700; margin: 0; outline: none; border-radius: 8px; padding: 2px 6px; margin-left: -6px; min-width: 60px; }
   h1:hover { background: var(--green-soft); cursor: text; }
@@ -87,11 +87,11 @@
 
   /* goal meter */
   #goal { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); padding: 14px 18px 12px; margin-bottom: 12px; }
-  #goal .top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+  #goal .top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; flex-wrap: wrap; row-gap: 2px; }
   #goal .now { font-size: 26px; font-weight: 600; }
   #goal .now small { font-size: 13px; font-weight: 400; color: var(--muted); }
   #goal .target { font-size: 13px; color: var(--muted); }
-  .meter { position: relative; height: 14px; background: var(--green-soft); border-radius: 999px; overflow: visible; }
+  .meter { position: relative; height: 14px; background: var(--green-soft); border-radius: 999px; overflow: visible; margin-top: 24px; }
   .meter .fill { position: absolute; inset: 0 auto 0 0; background: var(--green); border-radius: 999px; min-width: 0; transition: width .6s ease; }
   .meter .floor-tick { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--muted); border-radius: 2px; }
   .meter .floor-lab { position: absolute; top: -20px; transform: translateX(-50%); font-size: 10.5px; color: var(--muted); white-space: nowrap; }
@@ -127,8 +127,9 @@
   #formHours { grid-template-columns: 1fr 100px 145px auto; }
   #formPlot  { grid-template-columns: 1fr auto 120px auto; }
   @media (max-width: 600px) { .addForm { grid-template-columns: 1fr 1fr !important; } .addForm .wide { grid-column: 1 / -1; } }
+  .field, .amount-wrap { min-width: 0; }
   .field label { display: block; font-size: 11px; color: var(--muted); margin: 0 0 4px 2px; letter-spacing: .03em; }
-  .field input, .field select { width: 100%; font: inherit; font-size: 15px; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; }
+  .field input, .field select { width: 100%; min-width: 0; font: inherit; font-size: 15px; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; }
   .field input:focus, .field select:focus { outline: 2px solid var(--green); outline-offset: 0; border-color: transparent; }
   .amount-wrap { position: relative; }
   .amount-wrap .cur { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 15px; pointer-events: none; }
@@ -455,6 +456,9 @@ window.addEventListener("storage", e => { if (e.key === KEY) { state = load(); r
 
 /* ═══════════ derived ═══════════ */
 const currentYM = () => todayISO().slice(0, 7);
+/* rolling 30-day window (no upper bound, so slightly future-dated entries still count) */
+const cutoff30 = () => { const d = new Date(); d.setDate(d.getDate() - 29); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
+const inWindow = x => x.date >= cutoff30();
 const paidEntries = () => state.entries.filter(e => e.status === "paid");
 const waitingEntries = () => state.entries.filter(e => e.status === "waiting");
 const sumCents = list => list.reduce((a, e) => a + e.amountCents, 0);
@@ -614,11 +618,11 @@ function showConfirm({ title, body, yes, no }) {
 /* ═══════════ celebrations ═══════════ */
 function checkMilestones() {
   const ym = currentYM();
-  const paid = sumCents(paidEntries().filter(e => e.date.startsWith(ym)));
+  const paid = sumCents(paidEntries().filter(inWindow));
   const c = state.celebrated[ym] || (state.celebrated[ym] = {});
   if (!c.floor && paid >= state.floorCents && state.floorCents > 0) {
     c.floor = true; persist();
-    showToast("Your expenses are covered this month 🌱 everything from here is growth");
+    showToast("Your expenses are covered 🌱 everything from here is growth");
   } else if (!c.goal && paid >= state.goalCents && state.goalCents > 0) {
     c.goal = true; persist();
     showToast("Goal reached — full bloom 🌸 the low-payers can wait");
@@ -643,53 +647,49 @@ function renderTitle() {
   document.title = state.appName.replace(/^Christina.?s\s+/i, "") || "Money Garden";
 }
 function renderGoal() {
-  const ym = currentYM();
-  const paid = sumCents(paidEntries().filter(e => e.date.startsWith(ym)));
+  const paid = sumCents(paidEntries().filter(inWindow));
   const goal = state.goalCents, floor = state.floorCents;
   const pct = goal > 0 ? Math.min(paid / goal, 1) : 0;
   const floorPct = goal > 0 ? Math.min(floor / goal, 1) : 0;
   let word;
   if (goal <= 0) word = "";
-  else if (paid >= goal) word = "Full bloom 🌸 — anything more this month is pure choice. Guard your time.";
+  else if (paid >= goal) word = "Full bloom 🌸 — anything more is pure choice. Guard your time.";
   else if (floor > 0 && paid >= floor) word = `Expenses covered 🌱 — ${fmtMoney(goal - paid)} to full bloom`;
   else if (floor > 0) word = `${fmtMoney(floor - paid)} until your expenses are covered`;
   else word = `${fmtMoney(goal - paid)} to go`;
-  const monthName = new Date().toLocaleDateString(undefined, { month: "long" });
   $("#goal").innerHTML = `
     <div class="top">
-      <span class="now">${esc(fmtMoney(paid))} <small>harvested in ${esc(monthName)}</small></span>
+      <span class="now">${esc(fmtMoney(paid))} <small>harvested · last 30 days</small></span>
       <span class="target">goal ${esc(fmtMoney(goal))}</span>
     </div>
     <div class="meter" role="img" aria-label="Progress: ${esc(fmtMoney(paid))} of ${esc(fmtMoney(goal))}">
       <div class="fill" style="width:${(pct * 100).toFixed(1)}%"></div>
       ${floor > 0 && floor < goal ? `<div class="floor-tick" style="left:${(floorPct * 100).toFixed(1)}%"></div>
-      <div class="floor-lab" style="left:${(floorPct * 100).toFixed(1)}%">expenses ${esc(fmtMoney(floor))}</div>` : ""}
+      <div class="floor-lab" style="left:clamp(72px, ${(floorPct * 100).toFixed(1)}%, calc(100% - 78px))">expenses ${esc(fmtMoney(floor))}</div>` : ""}
     </div>
     <p class="word">${word}</p>`;
 }
 function renderStats() {
-  const ym = currentYM();
-  const hrsThisMonth = state.hours.filter(h => h.date.startsWith(ym)).reduce((a, h) => a + h.hours, 0);
-  const plotPaid = sumCents(paidEntries().filter(e => e.date.startsWith(ym) && e.plotId));
-  const rate = hrsThisMonth > 0 ? Math.round(plotPaid / hrsThisMonth) : null;
+  const hrsWindow = state.hours.filter(inWindow).reduce((a, h) => a + h.hours, 0);
+  const plotPaid = sumCents(paidEntries().filter(e => inWindow(e) && e.plotId));
+  const rate = hrsWindow > 0 ? Math.round(plotPaid / hrsWindow) : null;
   const waitSum = sumCents(waitingEntries());
   const waitN = waitingEntries().length;
   $("#stats").innerHTML = `
     <div class="tile"><div class="label">Per hour worked</div>
       <div class="value">${rate !== null ? esc(fmtMoney(rate)) + "<small>/hr</small>" : "—"}</div>
-      <div class="sub">${hrsThisMonth > 0 ? esc(fmtHours(hrsThisMonth)) + " hrs watered this month" : "log hours to see this"}</div></div>
+      <div class="sub">${hrsWindow > 0 ? esc(fmtHours(hrsWindow)) + " hrs watered · last 30 days" : "log hours to see this"}</div></div>
     <div class="tile"><div class="label">Waiting to be paid</div>
       <div class="value">${esc(fmtMoney(waitSum))}</div>
       <div class="sub">${waitN ? waitN + " harvest" + (waitN === 1 ? "" : "s") + " on the way" : "nothing pending"}</div></div>`;
 }
 function renderGarden() {
-  const ym = currentYM();
-  const monthPaid = paidEntries().filter(e => e.date.startsWith(ym))
+  const monthPaid = paidEntries().filter(inWindow)
     .sort((a, b) => a.date.localeCompare(b.date) || (a.createdAt - b.createdAt));
   const g = $("#garden");
-  const label = `<span class="bed-label">this month's garden — real money only</span>`;
+  const label = `<span class="bed-label">your garden — last 30 days · real money only</span>`;
   if (!monthPaid.length) {
-    g.innerHTML = label + `<span class="garden-empty">${state.entries.length ? "The bed is ready for this month 🌤️" : "Plant your first income below 🌱"}</span>`;
+    g.innerHTML = label + `<span class="garden-empty">${state.entries.length ? "The bed is ready 🌤️" : "Plant your first income below 🌱"}</span>`;
     return;
   }
   const MAX = 24;
