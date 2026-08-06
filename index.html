@@ -1369,34 +1369,55 @@ $("#shed").addEventListener("keydown", e => {
 /* voice — shared by the shed dump and the sunshine journal */
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 function wireMic(btn, input, hintEl, idleHint, listenHint, onFinal) {
-  let recog = null, listening = false;
-  btn.addEventListener("click", () => {
-    if (!SR) { input.focus(); showToast("No in-app mic on this device — tap the 🎙️ on your keyboard, it types for you"); return; }
-    if (listening) { try { recog.stop(); } catch {} return; }
+  /* stays listening through pauses; only the button (or a real error) stops it */
+  let recog = null, wantListening = false;
+  const setUI = on => {
+    btn.classList.toggle("listening", on);
+    hintEl.textContent = on ? listenHint : idleHint;
+  };
+  const stop = () => { wantListening = false; setUI(false); try { recog && recog.stop(); } catch {} };
+  const start = () => {
     recog = new SR();
     recog.lang = navigator.language || "en-US";
     recog.interimResults = true;
+    recog.continuous = true;
     recog.onresult = ev => {
-      let interim = "", final = "";
-      for (const r of ev.results) (r.isFinal ? final += r[0].transcript : interim += r[0].transcript);
-      input.value = (final + interim).trim();
-      if (final.trim()) { onFinal(final); input.value = ""; }
+      let interim = "";
+      for (let i = ev.resultIndex; i < ev.results.length; i++) {
+        const r = ev.results[i];
+        if (r.isFinal) { if (r[0].transcript.trim()) onFinal(r[0].transcript); }
+        else interim += r[0].transcript;
+      }
+      input.value = interim.trim();
     };
-    recog.onend = () => { listening = false; btn.classList.remove("listening"); hintEl.textContent = idleHint; };
-    recog.onerror = () => { showToast("Didn't catch that — try again, or use the keyboard 🎙️"); };
-    try {
-      recog.start(); listening = true;
-      btn.classList.add("listening");
-      hintEl.textContent = listenHint;
-    } catch { showToast("Mic couldn't start — use the keyboard 🎙️ for now"); }
+    recog.onend = () => {
+      /* Apple/Google cut the session on their own schedule — quietly relight it */
+      if (wantListening) { try { recog.start(); return; } catch { setTimeout(() => { if (wantListening) start(); }, 300); return; } }
+      setUI(false);
+    };
+    recog.onerror = ev => {
+      if (ev.error === "not-allowed" || ev.error === "service-not-allowed") {
+        wantListening = false; setUI(false);
+        showToast("Mic permission needed — or use the keyboard 🎙️");
+      }
+      /* no-speech / aborted / network: onend fires next and relights */
+    };
+    try { recog.start(); setUI(true); }
+    catch { wantListening = false; setUI(false); showToast("Mic couldn't start — use the keyboard 🎙️ for now"); }
+  };
+  btn.addEventListener("click", () => {
+    if (!SR) { input.focus(); showToast("No in-app mic on this device — tap the 🎙️ on your keyboard, it types for you"); return; }
+    if (wantListening) { stop(); return; }
+    wantListening = true;
+    start();
   });
 }
 wireMic($("#micBtn"), $("#dumpInput"), $("#dumpHint"),
   "No sorting needed — press return and it's out of your head.",
-  "Listening… speak your seed, pause when done 🌧️", addTask);
+  "Listening 🌧️ — pauses are fine, each thought becomes its own seed. Tap 🎙️ when you're done.", addTask);
 wireMic($("#sunMicBtn"), $("#sunInput"), $("#sunHint"),
   "Press return to keep it. Missed days don't matter — the sun comes back.",
-  "Listening… tell me the good thing 🌅", addSun);
+  "Listening 🌅 — take your time. Tap 🎙️ when you're done.", addSun);
 
 /* ═══════════ sunshine journal ═══════════ */
 let editingSunId = null;
