@@ -1,4 +1,4 @@
-const CACHE = "money-garden-2026-08-06T04-14-08-601Z";
+const CACHE = "money-garden-2026-08-06T04-21-09-033Z";
 const ASSETS = ["./", "./index.html", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png", "./apple-touch-icon.png"];
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));
@@ -11,7 +11,9 @@ self.addEventListener("activate", e => {
 self.addEventListener("fetch", e => {
   if (e.request.method !== "GET") return;
   e.respondWith(
-    fetch(e.request).then(r => {
+    /* cache:"no-cache" forces a check with the server every time (fast 304 when unchanged),
+       so a 10-minute HTTP cache can never pin an old version; offline still falls back */
+    fetch(e.request.url, { cache: "no-cache" }).then(r => {
       const copy = r.clone();
       caches.open(CACHE).then(c => c.put(e.request, copy));
       return r;
