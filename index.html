@@ -234,12 +234,27 @@
   .sbtn { font-size: 13px; font-weight: 600; color: var(--orange-ink); background: var(--orange-soft); border: none; border-radius: 8px; padding: 6px 14px; }
   .sbtn.soft { background: none; color: var(--muted); font-weight: 400; }
   .compost-link { font-size: 12.5px; color: var(--terracotta); background: none; border: none; margin-left: auto; padding: 4px 6px; }
-  #trayGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  #trayGrid { margin-bottom: 4px; }
   .tray-card { background: var(--card); border: 1.5px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); padding: 12px 14px; text-align: left; font: inherit; }
   .tray-card.on { border-color: var(--orange); background: var(--orange-soft); }
   .tray-card .t-emoji { font-size: 19px; }
+  .tray-card { position: relative; }
+  .tray-card:active { transform: scale(.97); }
+  .tray-card .t-arrow { position: absolute; right: 12px; top: 10px; color: var(--muted); font-size: 17px; }
   .tray-card .t-name { font-size: 13.5px; font-weight: 600; margin-top: 4px; color: var(--ink); }
   .tray-card .t-hint { font-size: 11.5px; color: var(--muted); margin-top: 1px; }
+  .tray-view { background: var(--card); border: 1.5px solid var(--orange); border-radius: 14px; box-shadow: var(--shadow); padding: 12px 14px; display: flex; align-items: center; gap: 11px; }
+  .tray-view .tv-emoji { font-size: 24px; }
+  .tray-view .tv-name { font-weight: 600; font-size: 15px; }
+  .tray-view .tv-hint { font-size: 11.5px; color: var(--muted); }
+  .tray-view .sbtn { margin-left: auto; white-space: nowrap; }
+  .pick-head { display: flex; align-items: center; gap: 12px; margin: 0 0 10px; }
+  .pick-count { font-size: 12.5px; color: var(--muted); }
+  .seed-row.pickable { cursor: pointer; }
+  li.on-bench { outline: 1.5px solid var(--orange); border-radius: 12px; }
+  .pick-sun { font-size: 16px; }
+  .bloomed-btn { background: none; border: none; font-size: 12.5px; color: var(--muted); margin: 8px 4px 0; padding: 2px; }
+  .bloomed-list .seed-text.done { text-decoration: line-through; color: var(--muted); }
 
   /* ---------- sunshine ---------- */
   .room.on-sun { background: var(--sun-soft); color: var(--sun-ink); border-color: var(--sun); font-weight: 600; }
@@ -412,7 +427,6 @@
       <p class="dump-hint" id="dumpHint">No sorting needed — press return and it's out of your head.</p>
     </div>
     <div id="bench"></div>
-    <h2 class="shed-head">Trays — tap one to peek inside</h2>
     <div id="trayGrid"></div>
     <div id="seedList"></div>
   </section>
@@ -1236,7 +1250,7 @@ $("#restoreBtn").addEventListener("click", () => $("#restoreInput").click());
 $("#restoreInput").addEventListener("change", e => { if (e.target.files[0]) doRestore(e.target.files[0]); e.target.value = ""; });
 
 /* ═══════════ potting shed ═══════════ */
-let shedFilter = null, editingTaskId = null;
+let shedFilter = null, editingTaskId = null, pickMode = false, showBloomed = false;
 const tsDay = ts => { const d = new Date(ts); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
 const trayById = id => state.trays.find(t => t.id === id);
 const openTasks = () => state.tasks.filter(t => t.status === "open");
@@ -1268,36 +1282,79 @@ function seedRow(t, onBench) {
 }
 
 function renderShed() {
-  /* today's bench */
   const bench = benchTasks();
   const doneToday = state.tasks.filter(t => t.status === "done" && t.doneAt && tsDay(t.doneAt) === todayISO());
+  const open = openTasks();
+
+  /* ── pick mode: the morning glance — everything laid out, tap three ── */
+  if (pickMode) {
+    $("#bench").innerHTML = `<h2 class="shed-head">Pick today's three 🌤️ — tap anything that calls to you</h2>
+      <div class="pick-head"><span class="pick-count">${bench.length} of 3 on the bench</span>
+      <button type="button" class="sbtn" data-act="pickDone">Done picking</button></div>`;
+    $("#trayGrid").innerHTML = "";
+    const groups = [{ emoji: "🫘", name: "Seed tray", tasks: open.filter(t => !t.tray) }]
+      .concat(state.trays.map(tr => ({ emoji: tr.emoji, name: tr.name, tasks: open.filter(t => t.tray === tr.id) })));
+    let html = "";
+    for (const g of groups) {
+      if (!g.tasks.length) continue;
+      html += `<h2 class="shed-head">${g.emoji} ${esc(g.name)}</h2><ul class="seeds">`;
+      for (const t of g.tasks) {
+        const on = t.today === todayISO();
+        html += `<li data-task="${esc(t.id)}" class="${on ? "on-bench" : ""}"><div class="seed-row pickable" data-act="pickToggle">
+          <span class="pick-sun">${on ? "☀️" : "🌑"}</span>
+          <span class="seed-text">${esc(t.text)}</span>${t.sub ? `<span class="seed-sub">${esc(t.sub)}</span>` : ""}
+        </div></li>`;
+      }
+      html += `</ul>`;
+    }
+    $("#seedList").innerHTML = html || `<p class="seeds-empty">Nothing to pick yet — toss some seeds first 🫘</p>`;
+    return;
+  }
+
+  /* ── today's bench ── */
   let benchHtml = `<h2 class="shed-head">Today's bench — three seeds max, on purpose</h2>`;
-  benchHtml += bench.length
-    ? `<ul class="seeds">${bench.map(t => seedRow(t, true)).join("")}</ul>`
-    : `<p class="bench-empty">Nothing on the bench — tap ☀️ on any seed below to choose today's three.</p>`;
-  if (doneToday.length) benchHtml += `<p class="bloomed">${"🌼".repeat(Math.min(doneToday.length, 12))} ${doneToday.length} seed${doneToday.length === 1 ? "" : "s"} bloomed today</p>`;
+  if (bench.length) benchHtml += `<ul class="seeds">${bench.map(t => seedRow(t, true)).join("")}</ul>`;
+  else benchHtml += `<p class="bench-empty">${open.length ? "The bench is empty." : "Toss a few seeds in first — then pick your three."}</p>`;
+  if (open.length && bench.length < 3) benchHtml += `<button type="button" class="sbtn" data-act="pickStart" style="margin-top:6px">🌤️ ${bench.length ? "Adjust the bench" : "Pick today's three"}</button>`;
+  if (doneToday.length) {
+    benchHtml += `<div><button type="button" class="bloomed-btn" data-act="toggleBloomed">${"🌼".repeat(Math.min(doneToday.length, 12))} ${doneToday.length} bloomed today ${showBloomed ? "▾" : "▸"}</button></div>`;
+    if (showBloomed) benchHtml += `<ul class="seeds bloomed-list">${doneToday.map(t =>
+      `<li data-task="${esc(t.id)}"><div class="seed-row"><span>🌼</span><span class="seed-text done" data-act="unbloom" title="Tap to bring it back">${esc(t.text)}</span></div></li>`).join("")}</ul>`;
+  }
   $("#bench").innerHTML = benchHtml;
 
-  /* trays */
-  $("#trayGrid").innerHTML = state.trays.map(tr => {
-    const n = openTasks().filter(t => t.tray === tr.id).length;
-    return `<button type="button" class="tray-card${shedFilter === tr.id ? " on" : ""}" data-traycard="${tr.id}">
-      <span class="t-emoji">${tr.emoji}</span>
-      <div class="t-name">${esc(tr.name)}</div>
-      <div class="t-hint">${esc(tr.hint)} · ${n} seed${n === 1 ? "" : "s"}</div>
-    </button>`;
-  }).join("");
+  /* ── trays: grid, or the inside of one tray ── */
+  if (shedFilter) {
+    const tr = trayById(shedFilter);
+    const n = open.filter(t => t.tray === tr.id).length;
+    $("#trayGrid").innerHTML = `<div class="tray-view">
+      <span class="tv-emoji">${tr.emoji}</span>
+      <div><div class="tv-name">${esc(tr.name)}</div>
+      <div class="tv-hint">${esc(tr.hint)} · ${n} seed${n === 1 ? "" : "s"} · new seeds land here while you're inside</div></div>
+      <button type="button" class="sbtn soft" data-act="backTrays">← all trays</button>
+    </div>`;
+  } else {
+    $("#trayGrid").innerHTML = `<h2 class="shed-head">Trays — tap one to step inside</h2>` +
+      `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">` +
+      state.trays.map(tr => {
+        const n = open.filter(t => t.tray === tr.id).length;
+        return `<button type="button" class="tray-card" data-traycard="${tr.id}">
+          <span class="t-emoji">${tr.emoji}</span><span class="t-arrow">›</span>
+          <div class="t-name">${esc(tr.name)}</div>
+          <div class="t-hint">${esc(tr.hint)} · ${n} seed${n === 1 ? "" : "s"}</div>
+        </button>`;
+      }).join("") + `</div>`;
+  }
 
-  /* seed list (bench excluded) */
+  /* ── seed list (bench excluded) ── */
   const benchIds = new Set(bench.map(t => t.id));
-  let seeds = openTasks().filter(t => !benchIds.has(t.id));
+  let seeds = open.filter(t => !benchIds.has(t.id));
   if (shedFilter) seeds = seeds.filter(t => t.tray === shedFilter);
   else seeds.sort((a, b) => (a.tray ? 1 : 0) - (b.tray ? 1 : 0) || b.createdAt - a.createdAt);
-  const label = shedFilter ? `${trayById(shedFilter).emoji} ${trayById(shedFilter).name}` : "The seed tray";
-  let listHtml = `<h2 class="shed-head">${esc(label)}${shedFilter ? ` <button type="button" class="wilted-toggle" data-act="allSeeds">show all</button>` : ""}</h2>`;
+  let listHtml = shedFilter ? "" : `<h2 class="shed-head">The seed tray</h2>`;
   listHtml += seeds.length
     ? `<ul class="seeds">${seeds.map(t => seedRow(t, false)).join("")}</ul>`
-    : `<p class="seeds-empty">${shedFilter ? "This tray is empty — dump something while it's open and it files itself here 🫘" : (openTasks().length ? "Every seed is on the bench ☀️" : "Empty tray, clear head 🌤️")}</p>`;
+    : `<p class="seeds-empty">${shedFilter ? "This tray is empty — toss a seed while you're inside and it files itself here 🫘" : (open.length ? "Every seed is on the bench ☀️" : "Empty tray, clear head 🌤️")}</p>`;
   $("#seedList").innerHTML = listHtml;
 }
 
@@ -1318,12 +1375,31 @@ $("#dumpInput").addEventListener("keydown", e => {
 $("#shed").addEventListener("click", e => {
   const card = e.target.closest("[data-traycard]");
   if (card) { shedFilter = shedFilter === card.dataset.traycard ? null : card.dataset.traycard; editingTaskId = null; renderShed(); return; }
-  const act = e.target.dataset.act;
-  if (act === "allSeeds") { shedFilter = null; renderShed(); return; }
+  const act = e.target.closest("[data-act]")?.dataset.act;
+  if (act === "allSeeds" || act === "backTrays") { shedFilter = null; renderShed(); return; }
+  if (act === "pickStart") { pickMode = true; showBloomed = false; editingTaskId = null; renderShed(); return; }
+  if (act === "pickDone") { pickMode = false; renderShed(); return; }
+  if (act === "toggleBloomed") { showBloomed = !showBloomed; renderShed(); return; }
   const li = e.target.closest("li[data-task]");
   if (!li) return;
   const t = state.tasks.find(x => x.id === li.dataset.task);
   if (!t) return;
+  if (act === "pickToggle") {
+    if (t.today === todayISO()) t.today = null;
+    else if (benchTasks().length >= 3) { showToast("Three is the magic number 🌱 — take one off first"); return; }
+    else {
+      t.today = todayISO();
+      if (benchTasks().length === 3) { pickMode = false; showToast("Bench is set ☀️ — three seeds for today"); }
+    }
+    markChanged(); persist(); renderShed(); return;
+  }
+  if (act === "unbloom") {
+    t.status = "open"; t.doneAt = null;
+    t.today = benchTasks().filter(x => x.id !== t.id).length < 3 ? todayISO() : null;
+    markChanged(); persist(); renderShed();
+    showToast(t.today ? "Back on the bench 🌱" : "Back in its tray 🌱");
+    return;
+  }
   if (act === "bloom") {
     t.status = "done"; t.doneAt = Date.now();
     markChanged(); persist(); renderShed();
