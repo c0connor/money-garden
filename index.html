@@ -424,7 +424,7 @@
         <input id="dumpInput" maxlength="200" placeholder="Toss a seed — anything on your mind…" aria-label="Brain dump">
         <button id="micBtn" type="button" title="Speak it instead">🎙️</button>
       </div>
-      <p class="dump-hint" id="dumpHint">No sorting needed — press return and it's out of your head.</p>
+      <p class="dump-hint" id="dumpHint">Press return — it lands in the Seed tray 🫘, file it later or never.</p>
     </div>
     <div id="bench"></div>
     <div id="trayGrid"></div>
@@ -1324,9 +1324,12 @@ function renderShed() {
   $("#bench").innerHTML = benchHtml;
 
   /* ── trays: grid, or the inside of one tray ── */
+  const inTray = id => id === "unsorted" ? (t => !t.tray) : (t => t.tray === id);
   if (shedFilter) {
-    const tr = trayById(shedFilter);
-    const n = open.filter(t => t.tray === tr.id).length;
+    const tr = shedFilter === "unsorted"
+      ? { emoji: "🫘", name: "Seed tray", hint: "fresh dumps, unsorted" }
+      : trayById(shedFilter);
+    const n = open.filter(inTray(shedFilter)).length;
     $("#trayGrid").innerHTML = `<div class="tray-view">
       <span class="tv-emoji">${tr.emoji}</span>
       <div><div class="tv-name">${esc(tr.name)}</div>
@@ -1334,8 +1337,14 @@ function renderShed() {
       <button type="button" class="sbtn soft" data-act="backTrays">← all trays</button>
     </div>`;
   } else {
+    const unsortedN = open.filter(t => !t.tray).length;
     $("#trayGrid").innerHTML = `<h2 class="shed-head">Trays — tap one to step inside</h2>` +
       `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">` +
+      `<button type="button" class="tray-card" data-traycard="unsorted" style="grid-column:1/-1">
+        <span class="t-emoji">🫘</span><span class="t-arrow">›</span>
+        <div class="t-name">Seed tray</div>
+        <div class="t-hint">fresh dumps, unsorted · ${unsortedN} seed${unsortedN === 1 ? "" : "s"}</div>
+      </button>` +
       state.trays.map(tr => {
         const n = open.filter(t => t.tray === tr.id).length;
         return `<button type="button" class="tray-card" data-traycard="${tr.id}">
@@ -1346,26 +1355,25 @@ function renderShed() {
       }).join("") + `</div>`;
   }
 
-  /* ── seed list (bench excluded) ── */
+  /* ── seeds show only inside a tray (bench excluded) ── */
+  if (!shedFilter) { $("#seedList").innerHTML = ""; return; }
   const benchIds = new Set(bench.map(t => t.id));
-  let seeds = open.filter(t => !benchIds.has(t.id));
-  if (shedFilter) seeds = seeds.filter(t => t.tray === shedFilter);
-  else seeds.sort((a, b) => (a.tray ? 1 : 0) - (b.tray ? 1 : 0) || b.createdAt - a.createdAt);
-  let listHtml = shedFilter ? "" : `<h2 class="shed-head">The seed tray</h2>`;
-  listHtml += seeds.length
-    ? `<ul class="seeds">${seeds.map(t => seedRow(t, false)).join("")}</ul>`
-    : `<p class="seeds-empty">${shedFilter ? "This tray is empty — toss a seed while you're inside and it files itself here 🫘" : (open.length ? "Every seed is on the bench ☀️" : "Empty tray, clear head 🌤️")}</p>`;
-  $("#seedList").innerHTML = listHtml;
+  const seeds = open.filter(t => !benchIds.has(t.id)).filter(inTray(shedFilter))
+    .sort((a, b) => b.createdAt - a.createdAt);
+  $("#seedList").innerHTML = seeds.length
+    ? `<ul class="seeds" style="margin-top:10px">${seeds.map(t => seedRow(t, false)).join("")}</ul>`
+    : `<p class="seeds-empty" style="margin-top:10px">This tray is empty — toss a seed while you're inside and it files itself here 🫘</p>`;
 }
 
 function addTask(text) {
   const clean = text.trim().slice(0, 200);
   if (!clean) return;
-  const t = { id: uid(), text: clean, tray: shedFilter, sub: null, today: null, status: "open", createdAt: Date.now(), doneAt: null };
+  const trayId = shedFilter && shedFilter !== "unsorted" ? shedFilter : null;
+  const t = { id: uid(), text: clean, tray: trayId, sub: null, today: null, status: "open", createdAt: Date.now(), doneAt: null };
   state.tasks.push(t);
   markChanged(); persist(); renderShed();
-  const tray = shedFilter ? trayById(shedFilter) : null;
-  showToast(tray ? `Seed tossed into ${tray.name} ${tray.emoji}` : "Seed tossed 🫘 — out of your head");
+  const tray = trayId ? trayById(trayId) : null;
+  showToast(tray ? `Seed tossed into ${tray.name} ${tray.emoji}` : "Seed tossed into the Seed tray 🫘");
 }
 
 $("#dumpInput").addEventListener("keydown", e => {
@@ -1499,7 +1507,7 @@ function wireMic(btn, input, hintEl, idleHint, listenHint, onFinal, accumulate =
   });
 }
 wireMic($("#micBtn"), $("#dumpInput"), $("#dumpHint"),
-  "No sorting needed — press return and it's out of your head.",
+  "Press return — it lands in the Seed tray 🫘, file it later or never.",
   "Listening 🌧️ — pauses are fine, each thought becomes its own seed. Tap 🎙️ when you're done.", addTask);
 wireMic($("#sunMicBtn"), $("#sunInput"), $("#sunHint"),
   "Press return to keep it. Missed days don't matter — the sun comes back.",
