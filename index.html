@@ -47,6 +47,9 @@
     --orange: #E8720C;
     --orange-ink: #9A4A00;
     --orange-soft: #FBE7D2;
+    --sun: #D9A408;
+    --sun-ink: #7A5600;
+    --sun-soft: #F8ECC8;
     --dot-weeding: #7A8471;
     --dot-crops: #4A7A47;
     --dot-orchard: #E8720C;
@@ -72,6 +75,9 @@
       --orange: #F08A2C;
       --orange-ink: #F5B071;
       --orange-soft: #3B2A16;
+      --sun: #D9A408;
+      --sun-ink: #EBC868;
+      --sun-soft: #3A3213;
       --dot-weeding: #96A08C;
       --dot-crops: #8FBB7F;
       --dot-orchard: #F08A2C;
@@ -235,6 +241,26 @@
   .tray-card .t-name { font-size: 13.5px; font-weight: 600; margin-top: 4px; color: var(--ink); }
   .tray-card .t-hint { font-size: 11.5px; color: var(--muted); margin-top: 1px; }
 
+  /* ---------- sunshine ---------- */
+  .room.on-sun { background: var(--sun-soft); color: var(--sun-ink); border-color: var(--sun); font-weight: 600; }
+  #sun[hidden] { display: none; }
+  .sunbox { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); padding: 14px 16px; margin-bottom: 16px; border-top: 3px solid var(--sun); }
+  .sun-q { font-size: 14.5px; font-weight: 600; margin: 0 0 10px; }
+  .sunbox input:focus { outline: 2px solid var(--sun); border-color: transparent; }
+  #sunMicBtn { font-size: 18px; background: var(--sun-soft); border: 1px solid var(--line); border-radius: 10px; padding: 0 13px; }
+  #sunMicBtn.listening { border-color: var(--sun); animation: pulse 1.2s ease-in-out infinite; }
+  .sun-count { font-size: 12.5px; color: var(--muted); margin: 0 4px 10px; }
+  ul.rays { list-style: none; margin: 0; padding: 0; }
+  ul.rays li { background: var(--card); border-radius: 12px; box-shadow: var(--shadow); margin-bottom: 8px; }
+  .ray-row { display: flex; align-items: baseline; gap: 11px; padding: 11px 14px; }
+  .ray-row .r-emoji { font-size: 17px; }
+  .ray-row .r-text { flex: 1; min-width: 0; font-size: 14.5px; cursor: pointer; overflow-wrap: anywhere; }
+  .ray-row .r-when { font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+  .ray-edit { padding: 11px 14px; display: grid; gap: 9px; }
+  .ray-edit input { font: inherit; font-size: 14px; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; width: 100%; }
+  .ray-edit input:focus { outline: 2px solid var(--sun); border-color: transparent; }
+  .ray-edit .sunbtn { font-size: 13px; font-weight: 600; color: var(--sun-ink); background: var(--sun-soft); border: none; border-radius: 8px; padding: 6px 14px; }
+
   /* ledger */
   .month-head { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; color: var(--muted); margin: 20px 4px 6px; letter-spacing: .02em; }
   .month-head .subtotal { font-variant-numeric: tabular-nums; }
@@ -303,6 +329,7 @@
   <div id="roomTabs" role="tablist">
     <button class="room on" id="tabGarden" role="tab">🌱 Garden</button>
     <button class="room" id="tabShed" role="tab">🪴 Potting shed</button>
+    <button class="room" id="tabSun" role="tab">☀️ Sunshine</button>
   </div>
 
   <section id="goal" aria-label="Monthly goal"></section>
@@ -390,6 +417,18 @@
     <div id="seedList"></div>
   </section>
 
+  <section id="sun" aria-label="Sunshine journal" hidden>
+    <div class="sunbox">
+      <p class="sun-q">One good thing from today ☀️</p>
+      <div class="dump-row">
+        <input id="sunInput" maxlength="300" placeholder="It counts, no matter how small…" aria-label="Today's good thing">
+        <button id="sunMicBtn" type="button" title="Speak it instead">🎙️</button>
+      </div>
+      <p class="dump-hint" id="sunHint">Press return to keep it. Missed days don't matter — the sun comes back.</p>
+    </div>
+    <div id="sunList"></div>
+  </section>
+
   <footer>
     <span class="meta" id="metaLine"></span>
     <button id="backupBtn">Back up</button> ·
@@ -432,6 +471,8 @@
 
     <h3>The potting shed 🪴</h3>
     <p>Your brain-dump room. Toss seeds (to-dos) in without sorting; file them into trays later or never. <b>Today's bench holds three max</b> — on purpose. Done seeds bloom 🌼; stale ones get composted 🍂, guilt-free. The 🎙️ button uses your device's speech service (Apple/Google) to turn talk into text — everything else stays on your device.</p>
+    <h3>Sunshine ☀️</h3>
+    <p>One good thing a day — typed or spoken. No streaks, no guilt; missed days don't matter, the sun comes back. Your rays ride in the same backup as everything else.</p>
     <h3>Tray names</h3>
     <div class="setrow"><input id="trayName0" maxlength="24" aria-label="Tray 1 name"> <span id="trayHint0"></span></div>
     <div class="setrow"><input id="trayName1" maxlength="24" aria-label="Tray 2 name"> <span id="trayHint1"></span></div>
@@ -517,7 +558,7 @@ function flowerFor(amountCents) {
 /* ═══════════ state ═══════════ */
 const KEY = "money-garden-v1";
 const DEFAULT_TRAYS = [
-  { id: "weeding", emoji: "🌿", name: "Weeding", hint: "life admin" },
+  { id: "weeding", emoji: "🌿", name: "Fertilizing", hint: "life admin" },
   { id: "crops", emoji: "🌽", name: "Cash crops", hint: "client work" },
   { id: "orchard", emoji: "🍎", name: "The orchard", hint: "album · film · merch" },
   { id: "pollen", emoji: "🐝", name: "Pollination", hint: "content + promo" }
@@ -527,7 +568,7 @@ const DEFAULTS = {
   v: 2, appName: "Christina's Money Garden", currency: "$",
   goalCents: 500000, floorCents: 350000,
   entries: [], plots: [], hours: [],
-  tasks: [], trays: DEFAULT_TRAYS, room: "garden",
+  tasks: [], trays: DEFAULT_TRAYS, suns: [], room: "garden",
   lastBackup: null, lastChange: null, nudgeSnooze: 0, celebrated: {}
 };
 function migrate(s) {
@@ -541,7 +582,9 @@ function migrate(s) {
   if (!Array.isArray(out.tasks)) out.tasks = [];
   if (!Array.isArray(out.trays) || out.trays.length !== 4) out.trays = DEFAULT_TRAYS.map(t => ({ ...t }));
   out.trays.forEach((t, i) => { t.id = DEFAULT_TRAYS[i].id; t.emoji = DEFAULT_TRAYS[i].emoji; t.hint = DEFAULT_TRAYS[i].hint; if (!t.name) t.name = DEFAULT_TRAYS[i].name; });
-  if (out.room !== "shed") out.room = "garden";
+  if (out.trays[0].name === "Weeding") out.trays[0].name = "Fertilizing";
+  if (!Array.isArray(out.suns)) out.suns = [];
+  if (!["garden", "shed", "sun"].includes(out.room)) out.room = "garden";
   return out;
 }
 function load() {
@@ -577,7 +620,7 @@ function backupData() {
   return JSON.stringify({ app: "money-garden", version: 2, exportedAt: new Date().toISOString(),
     appName: state.appName, currency: state.currency, goalCents: state.goalCents, floorCents: state.floorCents,
     entries: state.entries, plots: state.plots, hours: state.hours,
-    tasks: state.tasks, trays: state.trays }, null, 2);
+    tasks: state.tasks, trays: state.trays, suns: state.suns }, null, 2);
 }
 function doBackup() {
   download(`money-garden-backup-${todayISO()}.json`, backupData(), "application/json");
@@ -630,7 +673,8 @@ async function doRestore(file) {
     plots: Array.isArray(obj.plots) ? obj.plots : [],
     hours: Array.isArray(obj.hours) ? obj.hours : [],
     tasks: Array.isArray(obj.tasks) ? obj.tasks : [],
-    trays: obj.trays
+    trays: obj.trays,
+    suns: Array.isArray(obj.suns) ? obj.suns : []
   });
   state = { ...state, ...restored, lastChange: Date.now() };
   persist(); render();
@@ -740,7 +784,7 @@ function render() {
   renderTitle(); renderGoal(); renderStats(); renderGarden();
   renderTabs(); renderPlotSelect(); renderPlots(); renderList();
   renderDatalist(); renderMeta(); renderNudge();
-  renderShed(); roomSync();
+  renderShed(); renderSun(); roomSync();
   $$(".curPrefix").forEach(el => el.textContent = state.currency);
   $("#curInput").value = state.currency;
   $("#goalInput").value = (state.goalCents / 100).toLocaleString();
@@ -753,12 +797,14 @@ function render() {
   });
 }
 function roomSync() {
-  const shed = state.room === "shed";
-  ["#goal", "#stats", "#garden", "#add", "#plots", "#list"].forEach(s => { $(s).hidden = shed; });
-  if (shed) $("#nudge").hidden = true;
-  $("#shed").hidden = !shed;
-  $("#tabGarden").classList.toggle("on", !shed);
-  $("#tabShed").classList.toggle("on-shed", shed);
+  const room = state.room;
+  ["#goal", "#stats", "#garden", "#add", "#plots", "#list"].forEach(s => { $(s).hidden = room !== "garden"; });
+  if (room !== "garden") $("#nudge").hidden = true;
+  $("#shed").hidden = room !== "shed";
+  $("#sun").hidden = room !== "sun";
+  $("#tabGarden").classList.toggle("on", room === "garden");
+  $("#tabShed").classList.toggle("on-shed", room === "shed");
+  $("#tabSun").classList.toggle("on-sun", room === "sun");
 }
 function renderTitle() {
   const h = $("#appName");
@@ -1320,33 +1366,111 @@ $("#shed").addEventListener("keydown", e => {
   if (e.key === "Escape" && editingTaskId) { editingTaskId = null; renderShed(); }
 });
 
-/* voice dump */
+/* voice — shared by the shed dump and the sunshine journal */
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-let recog = null, listening = false;
-$("#micBtn").addEventListener("click", () => {
-  if (!SR) { $("#dumpInput").focus(); showToast("No in-app mic on this device — tap the 🎙️ on your keyboard, it types for you"); return; }
-  if (listening) { try { recog.stop(); } catch {} return; }
-  recog = new SR();
-  recog.lang = navigator.language || "en-US";
-  recog.interimResults = true;
-  recog.onresult = ev => {
-    let interim = "", final = "";
-    for (const r of ev.results) (r.isFinal ? final += r[0].transcript : interim += r[0].transcript);
-    $("#dumpInput").value = (final + interim).trim();
-    if (final.trim()) { addTask(final); $("#dumpInput").value = ""; }
-  };
-  recog.onend = () => { listening = false; $("#micBtn").classList.remove("listening"); $("#dumpHint").textContent = "No sorting needed — press return and it's out of your head."; };
-  recog.onerror = () => { showToast("Didn't catch that — try again, or use the keyboard 🎙️"); };
-  try {
-    recog.start(); listening = true;
-    $("#micBtn").classList.add("listening");
-    $("#dumpHint").textContent = "Listening… speak your seed, pause when done 🌧️";
-  } catch { showToast("Mic couldn't start — use the keyboard 🎙️ for now"); }
+function wireMic(btn, input, hintEl, idleHint, listenHint, onFinal) {
+  let recog = null, listening = false;
+  btn.addEventListener("click", () => {
+    if (!SR) { input.focus(); showToast("No in-app mic on this device — tap the 🎙️ on your keyboard, it types for you"); return; }
+    if (listening) { try { recog.stop(); } catch {} return; }
+    recog = new SR();
+    recog.lang = navigator.language || "en-US";
+    recog.interimResults = true;
+    recog.onresult = ev => {
+      let interim = "", final = "";
+      for (const r of ev.results) (r.isFinal ? final += r[0].transcript : interim += r[0].transcript);
+      input.value = (final + interim).trim();
+      if (final.trim()) { onFinal(final); input.value = ""; }
+    };
+    recog.onend = () => { listening = false; btn.classList.remove("listening"); hintEl.textContent = idleHint; };
+    recog.onerror = () => { showToast("Didn't catch that — try again, or use the keyboard 🎙️"); };
+    try {
+      recog.start(); listening = true;
+      btn.classList.add("listening");
+      hintEl.textContent = listenHint;
+    } catch { showToast("Mic couldn't start — use the keyboard 🎙️ for now"); }
+  });
+}
+wireMic($("#micBtn"), $("#dumpInput"), $("#dumpHint"),
+  "No sorting needed — press return and it's out of your head.",
+  "Listening… speak your seed, pause when done 🌧️", addTask);
+wireMic($("#sunMicBtn"), $("#sunInput"), $("#sunHint"),
+  "Press return to keep it. Missed days don't matter — the sun comes back.",
+  "Listening… tell me the good thing 🌅", addSun);
+
+/* ═══════════ sunshine journal ═══════════ */
+let editingSunId = null;
+const RAY_EMOJI = ["☀️", "🌤️", "🌞", "🌅"];
+
+function addSun(text) {
+  const clean = text.trim().slice(0, 300);
+  if (!clean) return;
+  state.suns.push({ id: uid(), text: clean, date: todayISO(), createdAt: Date.now() });
+  markChanged(); persist(); renderSun();
+  showToast("Ray kept ☀️");
+}
+
+function renderSun() {
+  const list = $("#sunList");
+  if (!state.suns.length) {
+    list.innerHTML = `<p class="seeds-empty">No rays yet — today's is waiting up there ☀️</p>`;
+    return;
+  }
+  const sorted = [...state.suns].sort((a, b) => b.date.localeCompare(a.date) || (b.createdAt - a.createdAt));
+  const days = new Set(state.suns.map(s => s.date)).size;
+  let html = `<p class="sun-count">${state.suns.length} ray${state.suns.length === 1 ? "" : "s"} collected across ${days} day${days === 1 ? "" : "s"}</p><ul class="rays">`;
+  for (const s of sorted) {
+    if (s.id === editingSunId) {
+      html += `<li data-sun="${esc(s.id)}"><div class="ray-edit">
+        <input class="ry-text" value="${esc(s.text)}" maxlength="300" aria-label="Edit this ray">
+        <div class="seed-actions">
+          <button type="button" class="sunbtn" data-act="saveRay">Save</button>
+          <button type="button" class="sbtn soft" data-act="cancelRay">Cancel</button>
+          <button type="button" class="compost-link" data-act="removeRay">remove</button>
+        </div></div></li>`;
+    } else {
+      const em = RAY_EMOJI[hashStr(s.id) % RAY_EMOJI.length];
+      html += `<li data-sun="${esc(s.id)}"><div class="ray-row">
+        <span class="r-emoji">${em}</span>
+        <span class="r-text" data-act="editRay">${esc(s.text)}</span>
+        <span class="r-when">${esc(fmtDay(s.date))}</span></div></li>`;
+    }
+  }
+  list.innerHTML = html + `</ul>`;
+}
+
+$("#sunInput").addEventListener("keydown", e => {
+  if (e.key === "Enter") { e.preventDefault(); addSun($("#sunInput").value); $("#sunInput").value = ""; }
+});
+$("#sun").addEventListener("click", e => {
+  const li = e.target.closest("li[data-sun]");
+  if (!li) return;
+  const s = state.suns.find(x => x.id === li.dataset.sun);
+  if (!s) return;
+  const act = e.target.dataset.act;
+  if (act === "editRay") { editingSunId = s.id; renderSun(); const inp = $("#sun .ry-text"); if (inp) inp.focus(); }
+  else if (act === "cancelRay") { editingSunId = null; renderSun(); }
+  else if (act === "saveRay") {
+    const text = li.querySelector(".ry-text").value.trim().slice(0, 300);
+    if (text) s.text = text;
+    editingSunId = null;
+    markChanged(); persist(); renderSun();
+  } else if (act === "removeRay") {
+    state.suns = state.suns.filter(x => x.id !== s.id);
+    editingSunId = null;
+    markChanged(); persist(); renderSun();
+    showToast("Ray removed", { actionLabel: "Undo", onAction: () => { state.suns.push(s); markChanged(); persist(); renderSun(); } });
+  }
+});
+$("#sun").addEventListener("keydown", e => {
+  if (e.key === "Enter" && e.target.classList.contains("ry-text")) { e.preventDefault(); e.target.closest("li").querySelector("[data-act=saveRay]").click(); }
+  if (e.key === "Escape" && editingSunId) { editingSunId = null; renderSun(); }
 });
 
 /* room switching + tray renames */
 $("#tabGarden").addEventListener("click", () => { state.room = "garden"; persist(); render(); });
 $("#tabShed").addEventListener("click", () => { state.room = "shed"; persist(); render(); });
+$("#tabSun").addEventListener("click", () => { state.room = "sun"; persist(); render(); });
 state.trays.forEach((t, i) => {
   document.addEventListener("change", e => {
     if (e.target.id === "trayName" + i) {
