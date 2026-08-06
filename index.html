@@ -145,7 +145,6 @@
   .addForm { display: grid; gap: 10px; align-items: end; }
   .addForm[hidden] { display: none; }
   #formMoney { grid-template-columns: 1fr 120px 145px auto; }
-  #formHours { grid-template-columns: 1fr 100px 145px auto; }
   #formPlot  { grid-template-columns: 1fr auto 120px auto; }
   @media (max-width: 600px) { .addForm { grid-template-columns: 1fr 1fr !important; } .addForm .wide { grid-column: 1 / -1; } }
   .field, .amount-wrap { min-width: 0; }
@@ -188,6 +187,21 @@
   .pbtn { font-size: 12.5px; font-weight: 600; color: var(--green-deep); background: none; border: 1.5px solid var(--green); border-radius: 8px; padding: 4px 12px; }
   .pbtn:hover { background: var(--green-soft); }
   .pbtn.soft { border-color: var(--line); color: var(--muted); font-weight: 400; }
+  .plot .nums .tappable { cursor: pointer; border-radius: 8px; margin: -2px; padding: 2px; }
+  .plot .nums .tappable:hover { background: var(--green-soft); }
+  .timer-live { font-size: 13.5px; font-weight: 600; color: var(--green-deep); font-variant-numeric: tabular-nums; }
+  .water-row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .water-row input { font: inherit; font-size: 14px; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; min-width: 0; }
+  .water-row .w-hrs { width: 90px; }
+  .water-row .w-date { width: 150px; }
+  .hour-log { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+  .hlog-row { text-align: left; font: inherit; font-size: 13px; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; cursor: pointer; }
+  .hlog-row:hover { border-color: var(--green); }
+  .hlog-edit { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .hlog-edit input { font: inherit; font-size: 13px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; color: var(--ink); min-width: 0; }
+  .hlog-edit .hl-hrs { width: 80px; }
+  .hlog-edit .hl-date { width: 145px; }
+  .hlog-empty { font-size: 12.5px; color: var(--muted); margin: 8px 2px 0; }
   .plot .editZone { margin-top: 10px; display: grid; grid-template-columns: 1fr 130px; gap: 8px; }
   .plot .editZone input { font: inherit; font-size: 14px; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; width: 100%; }
   .plot .editRow2 { grid-column: 1 / -1; display: flex; gap: 8px; align-items: center; }
@@ -354,7 +368,6 @@
   <div id="add">
     <div class="chips" role="tablist">
       <button class="chip" data-tab="money" role="tab">💵 Money in</button>
-      <button class="chip" data-tab="hours" role="tab">⏱️ Hours</button>
       <button class="chip" data-tab="plot" role="tab">🪴 New plot</button>
     </div>
 
@@ -373,23 +386,6 @@
         <input id="mDate" type="date" required>
       </div>
       <button class="go-btn" type="submit">Plant it 🌱</button>
-    </form>
-
-    <form id="formHours" class="addForm" autocomplete="off" hidden>
-      <div class="field wide">
-        <label for="hPlot">Which plot?</label>
-        <select id="hPlot" required></select>
-      </div>
-      <div class="field">
-        <label for="hHours">Hours</label>
-        <input id="hHours" inputmode="decimal" placeholder="1.5" required>
-      </div>
-      <div class="field">
-        <label for="hDate">Date</label>
-        <input id="hDate" type="date" required>
-      </div>
-      <button class="go-btn" type="submit">Water it 💧</button>
-      <p class="form-hint" id="hoursHint" hidden>No plots yet — tap 🪴 New plot first (a client job or a company you work for).</p>
     </form>
 
     <form id="formPlot" class="addForm" autocomplete="off" hidden>
@@ -461,6 +457,9 @@
     <h3>The idea</h3>
     <p>You track two things: <b>money that landed</b> (harvests 🌻) and <b>hours you spent</b> (watering 💧). Plots connect them — each client job or company is a plot, and fee ÷ hours shows what you <i>really</i> earn per hour there.</p>
 
+    <h3>The timer &amp; quarter-hours ⏱</h3>
+    <p>Tap <b>▶ Timer</b> on a plot when you start working; <b>Stop &amp; log</b> bills in quarter-hours, your rule: 5+ minutes into a quarter rounds up, under 5 rounds down (6 min → 0.25 hr · 34 min → 0.5 hr). Under 5 minutes total logs nothing. The timer keeps running even if you close the app. Tap a plot's <b>hours number</b> to see and fix every log.</p>
+
     <h3>Money only counts when it's real</h3>
     <p>Invoices and finished jobs sit as “waiting” (dashed, no flower) until you mark them paid. Canceled? Remove it — your totals never lied. The garden only grows on real money.</p>
 
@@ -498,7 +497,7 @@
       <input id="curInput" class="tiny" maxlength="4" aria-label="Currency symbol"> <span>shown before every amount</span>
     </div>
 
-    <p class="soft" style="margin-top:20px">Made with 🌱 for Christina · v2 · updated Aug 5 · works offline forever</p>
+    <p class="soft" style="margin-top:20px">Made with 🌱 for Christina · v2 · updated Aug 6 · works offline forever</p>
   </div>
 </div>
 
@@ -582,7 +581,7 @@ const DEFAULTS = {
   v: 2, appName: "Christina's Money Garden", currency: "$",
   goalCents: 500000, floorCents: 350000,
   entries: [], plots: [], hours: [],
-  tasks: [], trays: DEFAULT_TRAYS, suns: [], room: "garden",
+  tasks: [], trays: DEFAULT_TRAYS, suns: [], room: "garden", timer: null,
   lastBackup: null, lastChange: null, nudgeSnooze: 0, celebrated: {}
 };
 function migrate(s) {
@@ -629,12 +628,32 @@ function realHourly(p) {
   return hrs > 0 ? Math.round(p.rateCents / hrs) : null;
 }
 
+/* ═══════════ plot timer (quarter-hour billing) ═══════════ */
+/* her rule: each 15-min block needs 5+ min of spillover to round up.
+   6 min → 0.25 hr · 34 min → 0.5 hr · 40 min → 0.75 hr · under 5 min → nothing */
+function quarterize(mins) {
+  return (Math.floor(mins / 15) + (mins % 15 >= 5 ? 1 : 0)) * 0.25;
+}
+function fmtElapsed(ms) {
+  const s = Math.floor(ms / 1000), m = Math.floor(s / 60), h = Math.floor(m / 60);
+  return h ? `${h}:${pad(m % 60)}:${pad(s % 60)}` : `${m}:${pad(s % 60)}`;
+}
+let tickInt = null;
+function startTick() {
+  clearInterval(tickInt);
+  if (!state.timer) return;
+  tickInt = setInterval(() => {
+    const el = document.querySelector(".timer-elapsed");
+    if (el && state.timer) el.textContent = fmtElapsed(Date.now() - state.timer.startedAt);
+  }, 1000);
+}
+
 /* ═══════════ backup / restore / csv ═══════════ */
 function backupData() {
   return JSON.stringify({ app: "money-garden", version: 2, exportedAt: new Date().toISOString(),
     appName: state.appName, currency: state.currency, goalCents: state.goalCents, floorCents: state.floorCents,
     entries: state.entries, plots: state.plots, hours: state.hours,
-    tasks: state.tasks, trays: state.trays, suns: state.suns }, null, 2);
+    tasks: state.tasks, trays: state.trays, suns: state.suns, timer: state.timer }, null, 2);
 }
 function doBackup() {
   download(`money-garden-backup-${todayISO()}.json`, backupData(), "application/json");
@@ -688,7 +707,8 @@ async function doRestore(file) {
     hours: Array.isArray(obj.hours) ? obj.hours : [],
     tasks: Array.isArray(obj.tasks) ? obj.tasks : [],
     trays: obj.trays,
-    suns: Array.isArray(obj.suns) ? obj.suns : []
+    suns: Array.isArray(obj.suns) ? obj.suns : [],
+    timer: obj.timer || null
   });
   state = { ...state, ...restored, lastChange: Date.now() };
   persist(); render();
@@ -793,10 +813,11 @@ function checkMilestones() {
 
 /* ═══════════ rendering ═══════════ */
 let editingId = null, lastAddedId = null, currentTab = "money", plotEditId = null, showWilted = false;
+let plotWaterId = null, plotLogId = null, editingHourId = null;
 
 function render() {
   renderTitle(); renderGoal(); renderStats(); renderGarden();
-  renderTabs(); renderPlotSelect(); renderPlots(); renderList();
+  renderTabs(); renderPlots(); renderList();
   renderDatalist(); renderMeta(); renderNudge();
   renderShed(); renderSun(); roomSync();
   $$(".curPrefix").forEach(el => el.textContent = state.currency);
@@ -886,17 +907,7 @@ function renderGarden() {
 function renderTabs() {
   $$(".chip").forEach(c => c.classList.toggle("on", c.dataset.tab === currentTab));
   $("#formMoney").hidden = currentTab !== "money";
-  $("#formHours").hidden = currentTab !== "hours";
   $("#formPlot").hidden = currentTab !== "plot";
-}
-function renderPlotSelect(keep) {
-  const sel = $("#hPlot");
-  const active = state.plots.filter(p => p.status !== "canceled" && p.status !== "paid");
-  const val = keep || sel.value;
-  sel.innerHTML = active.map(p => `<option value="${esc(p.id)}">${esc(p.name)}${p.kind === "hourly" ? ` · ${esc(fmtMoney(p.rateCents))}/hr` : ""}</option>`).join("");
-  if (val && active.some(p => p.id === val)) sel.value = val;
-  $("#hoursHint").hidden = active.length > 0;
-  sel.disabled = active.length === 0;
 }
 function renderDatalist() {
   const seen = new Set();
@@ -909,29 +920,59 @@ function plotCard(p) {
   const hrs = plotHours(p.id);
   const rh = realHourly(p);
   const editing = p.id === plotEditId;
-  let numsHtml, actsHtml, pill, emoji;
+  const timerHere = state.timer && state.timer.plotId === p.id;
+  let numsHtml, pill, emoji, statusActs = "";
+  const hoursCell = label => `<div class="tappable" data-act="log" title="Tap to see or fix the hour log">
+    <div class="nl">${label} ▾</div><div class="nv">${esc(fmtHours(hrs))}</div></div>`;
   if (p.kind === "hourly") {
     emoji = "🌿";
     const un = unbilledHours(p.id);
     pill = un > 0 ? `<span class="pill growing">${esc(fmtHours(un))} hrs to invoice</span>` : `<span class="pill growing">growing</span>`;
     numsHtml = `
       <div><div class="nl">rate</div><div class="nv">${esc(fmtMoney(p.rateCents))}<small>/hr</small></div></div>
-      <div><div class="nl">hours ever</div><div class="nv">${esc(fmtHours(hrs))}</div></div>
+      ${hoursCell("hours ever")}
       <div><div class="nl">unbilled</div><div class="nv">${esc(fmtMoney(Math.round(un * p.rateCents)))}</div></div>`;
-    actsHtml = `<button class="pbtn" data-act="water">+ hours</button>
-      ${un > 0 ? `<button class="pbtn" data-act="invoice">Invoice these →</button>` : ""}
-      <button class="pbtn soft" data-act="edit">edit</button>`;
+    if (un > 0) statusActs = `<button class="pbtn" data-act="invoice">Invoice these →</button>`;
   } else {
     emoji = "🪴";
     pill = p.status === "sent" ? `<span class="pill sent">sent · waiting</span>` : `<span class="pill growing">growing</span>`;
     numsHtml = `
       <div><div class="nl">project rate</div><div class="nv">${esc(fmtMoney(p.rateCents))}</div></div>
-      <div><div class="nl">hours so far</div><div class="nv">${esc(fmtHours(hrs))}</div></div>
+      ${hoursCell("hours so far")}
       <div><div class="nl">real hourly</div><div class="nv">${rh !== null ? esc(fmtMoney(rh)) + "<small>/hr</small>" : "—"}</div></div>`;
-    actsHtml = `<button class="pbtn" data-act="water">+ hours</button>
-      ${p.status === "growing" ? `<button class="pbtn" data-act="send">Mark sent 🌸</button>` : ""}
-      ${p.status === "sent" ? `<button class="pbtn" data-act="paid">Mark paid 🌻</button>` : ""}
-      <button class="pbtn soft" data-act="edit">edit</button>`;
+    if (p.status === "growing") statusActs = `<button class="pbtn" data-act="send">Mark sent 🌸</button>`;
+    if (p.status === "sent") statusActs = `<button class="pbtn" data-act="paid">Mark paid 🌻</button>`;
+  }
+  const timerActs = timerHere
+    ? `<span class="timer-live">⏱ <span class="timer-elapsed">${fmtElapsed(Date.now() - state.timer.startedAt)}</span></span>
+       <button class="pbtn" data-act="timerStop">Stop &amp; log</button>
+       <button class="linky" data-act="timerDiscard">discard</button>`
+    : `<button class="pbtn" data-act="timerStart">▶ Timer</button>`;
+  const actsHtml = `${timerActs}
+    <button class="pbtn soft" data-act="water">+ hours</button>
+    ${statusActs}
+    <button class="pbtn soft" data-act="edit">edit</button>`;
+  const waterHtml = p.id === plotWaterId ? `<div class="water-row">
+      <input class="w-hrs" inputmode="decimal" placeholder="1.5" aria-label="Hours">
+      <input class="w-date" type="date" value="${todayISO()}" aria-label="Date">
+      <button class="pbtn" data-act="waterSave">Water it 💧</button>
+    </div>` : "";
+  let logHtml = "";
+  if (p.id === plotLogId) {
+    const logs = state.hours.filter(h => h.plotId === p.id)
+      .sort((a, b) => b.date.localeCompare(a.date) || (b.createdAt - a.createdAt));
+    logHtml = logs.length
+      ? `<div class="hour-log">` + logs.map(h => h.id === editingHourId
+          ? `<div class="hlog-edit" data-hour="${esc(h.id)}">
+              <input class="hl-hrs" inputmode="decimal" value="${h.hours}" aria-label="Hours">
+              <input class="hl-date" type="date" value="${esc(h.date)}" aria-label="Date">
+              <button class="pbtn" data-act="saveHour">Save</button>
+              <button class="pbtn soft" data-act="cancelHour">Cancel</button>
+              <button class="linky" data-act="removeHour">remove</button>
+            </div>`
+          : `<button type="button" class="hlog-row" data-hour="${esc(h.id)}" data-act="editHour">${esc(fmtDay(h.date))} · ${esc(fmtHours(h.hours))} hrs${h.invoiced ? " · invoiced" : ""} <span style="float:right">✎</span></button>`
+        ).join("") + `</div>`
+      : `<p class="hlog-empty">No hours logged yet — the ▶ Timer or + hours will fill this.</p>`;
   }
   const editZone = editing ? `
     <div class="editZone">
@@ -948,7 +989,7 @@ function plotCard(p) {
     <div class="head"><span class="pemoji">${emoji}</span>
       <span class="pname" data-act="edit" title="Edit this plot">${esc(p.name)}</span>${pill}</div>
     <div class="nums">${numsHtml}</div>
-    ${editing ? editZone : `<div class="acts">${actsHtml}</div>`}
+    ${editing ? editZone : `<div class="acts">${actsHtml}</div>${waterHtml}${logHtml}`}
   </div>`;
 }
 function renderPlots() {
@@ -1052,22 +1093,6 @@ $("#formMoney").addEventListener("submit", e => {
   showToast(`Planted 🌷 ${fmtMoney(cents)} for “${project}”`);
 });
 
-$("#formHours").addEventListener("submit", e => {
-  e.preventDefault();
-  const plotId = $("#hPlot").value;
-  const hrs = parseHrs($("#hHours").value);
-  const date = $("#hDate").value;
-  const p = plotById(plotId);
-  if (!p || !hrs || !date) { showToast(!hrs ? "Hours needs to be a number above zero 🌵" : "Pick a plot and a date 🌵"); return; }
-  state.hours.push({ id: uid(), plotId, hours: hrs, date, createdAt: Date.now(), invoiced: false });
-  markChanged(); persist(); render();
-  $("#hHours").value = ""; $("#hHours").focus();
-  const rh = realHourly(p);
-  showToast(p.kind === "flat" && rh !== null
-    ? `Watered 💧 ${fmtHours(hrs)} hrs on “${p.name}” — real hourly now ${fmtMoney(rh)}/hr`
-    : `Watered 💧 ${fmtHours(hrs)} hrs on “${p.name}”`);
-});
-
 let plotKind = "flat";
 $("#kindFlat").addEventListener("click", () => { plotKind = "flat"; syncKind(); });
 $("#kindHourly").addEventListener("click", () => { plotKind = "hourly"; syncKind(); });
@@ -1085,8 +1110,8 @@ $("#formPlot").addEventListener("submit", e => {
   state.plots.push(p);
   markChanged(); persist(); render();
   $("#pName").value = ""; $("#pRate").value = "";
-  currentTab = "hours"; renderTabs(); renderPlotSelect(p.id);
-  showToast(`New plot dug 🪴 “${p.name}” — water it with hours as you work`);
+  currentTab = "money"; renderTabs();
+  showToast(`New plot dug 🪴 “${p.name}” — hit ▶ Timer on it when you start working`);
 });
 
 /* ═══════════ plot actions ═══════════ */
@@ -1095,9 +1120,92 @@ $("#plots").addEventListener("click", async e => {
   if (!card) return;
   const p = plotById(card.dataset.plot);
   if (!p) return;
-  const act = e.target.dataset.act;
-  if (act === "water") { currentTab = "hours"; renderTabs(); renderPlotSelect(p.id); $("#hHours").focus(); return; }
-  if (act === "edit") { plotEditId = p.id; renderPlots(); return; }
+  const act = e.target.closest("[data-act]")?.dataset.act;
+  if (act === "timerStart") {
+    if (state.timer) {
+      const running = plotById(state.timer.plotId);
+      showToast(`One timer at a time 🌱 — stop the one on “${running ? running.name : "another plot"}” first`);
+      return;
+    }
+    state.timer = { plotId: p.id, startedAt: Date.now() };
+    persist(); renderPlots(); startTick();
+    showToast(`Timer running on “${p.name}” ⏱ — go make something`);
+    return;
+  }
+  if (act === "timerStop") {
+    if (!state.timer) return;
+    const mins = (Date.now() - state.timer.startedAt) / 60000;
+    const logged = quarterize(mins);
+    state.timer = null; clearInterval(tickInt);
+    if (logged <= 0) {
+      persist(); renderPlots();
+      showToast(`Only ${Math.max(1, Math.round(mins))} min — under 5 minutes, nothing logged 🌱`);
+      return;
+    }
+    state.hours.push({ id: uid(), plotId: p.id, hours: logged, date: todayISO(), createdAt: Date.now(), invoiced: false });
+    markChanged(); persist(); render();
+    showToast(`Watered 💧 ${fmtHours(logged)} hrs (${Math.round(mins)} min) on “${p.name}”`);
+    return;
+  }
+  if (act === "timerDiscard") {
+    state.timer = null; clearInterval(tickInt);
+    persist(); renderPlots();
+    showToast("Timer tossed — nothing logged");
+    return;
+  }
+  if (act === "water") {
+    plotWaterId = plotWaterId === p.id ? null : p.id;
+    plotLogId = null; editingHourId = null;
+    renderPlots();
+    const inp = document.querySelector(`[data-plot="${p.id}"] .w-hrs`);
+    if (inp) inp.focus();
+    return;
+  }
+  if (act === "waterSave") {
+    const hrsV = parseHrs(card.querySelector(".w-hrs").value);
+    const dateV = card.querySelector(".w-date").value;
+    if (!hrsV || !dateV) { showToast("Hours needs to be a number above zero 🌵"); return; }
+    state.hours.push({ id: uid(), plotId: p.id, hours: hrsV, date: dateV, createdAt: Date.now(), invoiced: false });
+    plotWaterId = null;
+    markChanged(); persist(); render();
+    const rh = realHourly(p);
+    showToast(p.kind === "flat" && rh !== null
+      ? `Watered 💧 — real hourly now ${fmtMoney(rh)}/hr`
+      : `Watered 💧 ${fmtHours(hrsV)} hrs on “${p.name}”`);
+    return;
+  }
+  if (act === "log") {
+    plotLogId = plotLogId === p.id ? null : p.id;
+    plotWaterId = null; editingHourId = null;
+    renderPlots();
+    return;
+  }
+  if (act === "editHour" || act === "saveHour" || act === "cancelHour" || act === "removeHour") {
+    const hEl = e.target.closest("[data-hour]");
+    const h = hEl && state.hours.find(x => x.id === hEl.dataset.hour);
+    if (!h) return;
+    if (act === "editHour") { editingHourId = h.id; renderPlots(); return; }
+    if (act === "cancelHour") { editingHourId = null; renderPlots(); return; }
+    if (act === "saveHour") {
+      const hrsV = parseHrs(hEl.querySelector(".hl-hrs").value);
+      const dateV = hEl.querySelector(".hl-date").value;
+      if (!hrsV || !dateV) { showToast("Hours needs to be a number above zero 🌵"); return; }
+      h.hours = hrsV; h.date = dateV;
+      editingHourId = null;
+      markChanged(); persist(); render();
+      showToast("Log fixed 🌿");
+      return;
+    }
+    state.hours = state.hours.filter(x => x.id !== h.id);
+    editingHourId = null;
+    markChanged(); persist(); render();
+    showToast(`Removed ${fmtHours(h.hours)} hrs from “${p.name}”`, {
+      actionLabel: "Undo",
+      onAction: () => { state.hours.push(h); markChanged(); persist(); render(); showToast("Back in the log 💧"); }
+    });
+    return;
+  }
+  if (act === "edit") { plotEditId = p.id; plotWaterId = null; plotLogId = null; renderPlots(); return; }
   if (act === "cancelEdit") { plotEditId = null; renderPlots(); return; }
   if (act === "saveEdit") {
     const name = card.querySelector(".pe-name").value.trim();
@@ -1597,9 +1705,9 @@ state.trays.forEach((t, i) => {
 
 /* ═══════════ boot ═══════════ */
 $("#mDate").value = todayISO();
-$("#hDate").value = todayISO();
 render();
 initAutosave();
+startTick();
 </script>
 <script>
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
