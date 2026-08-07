@@ -1418,9 +1418,9 @@ $("#plots").addEventListener("click", async e => {
     if (!hrs) return;
     const amount = Math.round(hrs * p.rateCents);
     const ok = await showConfirm({
-      title: "Invoice these hours? 🧾",
-      body: `${fmtHours(hrs)} hours × ${fmtMoney(p.rateCents)}/hr = ${fmtMoney(amount)} for “${p.name}”. It'll sit as waiting until you mark it paid.`,
-      yes: "Yes, invoiced", no: "Not yet"
+      title: "Make this invoice? 🧾",
+      body: `${fmtHours(hrs)} hours × ${fmtMoney(p.rateCents)}/hr = ${fmtMoney(amount)} for “${p.name}”. I'll draw up the invoice document for you to send, and park the money as waiting until it's paid.`,
+      yes: "Make the invoice", no: "Not yet"
     });
     if (!ok) return;
     un.forEach(h => h.invoiced = true);
@@ -1766,7 +1766,7 @@ $("#shed").addEventListener("keydown", e => {
   if (e.key === "Escape" && editingTaskId) { editingTaskId = null; renderShed(); }
 });
 
-/* swipe right anywhere in the shed to step back (close a tray / exit picking) */
+/* swipe left anywhere in the shed to step back (close a tray / exit picking) */
 let swipeX = null, swipeY = null;
 $("#shed").addEventListener("touchstart", e => {
   if (e.target.closest("input")) { swipeX = null; return; }
@@ -1777,7 +1777,7 @@ $("#shed").addEventListener("touchend", e => {
   const dx = e.changedTouches[0].clientX - swipeX;
   const dy = Math.abs(e.changedTouches[0].clientY - swipeY);
   swipeX = swipeY = null;
-  if (dx > 60 && dy < 50) {
+  if (dx < -60 && dy < 50) {
     if (pickMode) { pickMode = false; renderShed(); }
     else if (shedFilter) { shedFilter = null; renderShed(); }
   }
