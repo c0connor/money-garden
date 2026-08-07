@@ -1789,15 +1789,23 @@ function wireMic(btn, input, hintEl, idleHint, listenHint, onFinal, accumulate =
   /* stays listening through pauses; only the button (or a real error) stops it.
      accumulate=false: every pause-separated phrase becomes its own item (shed).
      accumulate=true: everything piles into ONE entry, saved on tap-off (sunshine). */
-  let recog = null, wantListening = false, committed = "";
+  let recog = null, wantListening = false, committed = "", flushTimer = null;
   const setUI = on => {
     btn.classList.toggle("listening", on);
     hintEl.textContent = on ? listenHint : idleHint;
   };
+  const flush = () => {
+    clearTimeout(flushTimer); flushTimer = null;
+    if (accumulate && committed.trim()) onFinal(committed);
+    committed = ""; input.value = "";
+  };
   const stop = () => {
     wantListening = false; setUI(false);
-    try { recog && recog.stop(); } catch {}
-    if (accumulate && committed.trim()) { onFinal(committed); committed = ""; input.value = ""; }
+    if (!recog) { flush(); return; }
+    /* don't save yet — the sentence in flight arrives as one more result
+       after recog.stop(); onend flushes it, with a timer as a safety net */
+    flushTimer = setTimeout(flush, 1600);
+    try { recog.stop(); } catch { flush(); }
   };
   const start = () => {
     recog = new SR();
@@ -1819,6 +1827,8 @@ function wireMic(btn, input, hintEl, idleHint, listenHint, onFinal, accumulate =
     recog.onend = () => {
       /* Apple/Google cut the session on their own schedule — quietly relight it */
       if (wantListening) { try { recog.start(); return; } catch { setTimeout(() => { if (wantListening) start(); }, 300); return; } }
+      /* user stopped: the trailing result has landed by now — save everything */
+      flush();
       setUI(false);
     };
     recog.onerror = ev => {
