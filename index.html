@@ -1747,9 +1747,17 @@ $("#shed").addEventListener("click", e => {
   } else if (e.target.dataset.tray !== undefined) {
     t.tray = e.target.dataset.tray || null;
     if (t.tray !== "orchard") t.sub = null;
+    markChanged(); persist();
+    const stillHere = !shedFilter || (shedFilter === "unsorted" ? !t.tray : t.tray === shedFilter);
+    if (!stillHere) {
+      editingTaskId = null;
+      const tr = t.tray ? trayById(t.tray) : null;
+      showToast(tr ? `Filed into ${tr.name} ${tr.emoji}` : "Back in the Seed tray 🫘");
+    }
     renderShed();
   } else if (e.target.dataset.sub) {
     t.sub = t.sub === e.target.dataset.sub ? null : e.target.dataset.sub;
+    markChanged(); persist();
     renderShed();
   }
 });
