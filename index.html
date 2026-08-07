@@ -532,7 +532,7 @@ function fmtMoney(cents, symbol = true) {
   const n = (cents / 100).toLocaleString(undefined, { minimumFractionDigits: whole ? 0 : 2, maximumFractionDigits: 2 });
   return (symbol ? state.currency : "") + n;
 }
-function fmtHours(h) { return (Math.round(h * 10) / 10).toLocaleString(); }
+function fmtHours(h) { return (Math.round(h * 100) / 100).toLocaleString(undefined, { maximumFractionDigits: 2 }); }
 function parseAmount(str) {
   const v = parseFloat(String(str).replace(/[^0-9.,-]/g, "").replace(/,/g, ""));
   if (!isFinite(v) || v <= 0 || v > 999999999) return null;
@@ -541,7 +541,7 @@ function parseAmount(str) {
 function parseHrs(str) {
   const v = parseFloat(String(str).replace(/[^0-9.,-]/g, "").replace(/,/g, ""));
   if (!isFinite(v) || v <= 0 || v > 10000) return null;
-  return Math.round(v * 10) / 10;
+  return Math.round(v * 100) / 100;
 }
 function fmtDay(iso) {
   const [y, m, d] = iso.split("-").map(Number);
@@ -1557,6 +1557,23 @@ $("#shed").addEventListener("keydown", e => {
   if (e.key === "Enter" && e.target.classList.contains("se-text")) { e.preventDefault(); e.target.closest("li").querySelector("[data-act=saveSeed]").click(); }
   if (e.key === "Escape" && editingTaskId) { editingTaskId = null; renderShed(); }
 });
+
+/* swipe right anywhere in the shed to step back (close a tray / exit picking) */
+let swipeX = null, swipeY = null;
+$("#shed").addEventListener("touchstart", e => {
+  if (e.target.closest("input")) { swipeX = null; return; }
+  swipeX = e.touches[0].clientX; swipeY = e.touches[0].clientY;
+}, { passive: true });
+$("#shed").addEventListener("touchend", e => {
+  if (swipeX === null) return;
+  const dx = e.changedTouches[0].clientX - swipeX;
+  const dy = Math.abs(e.changedTouches[0].clientY - swipeY);
+  swipeX = swipeY = null;
+  if (dx > 60 && dy < 50) {
+    if (pickMode) { pickMode = false; renderShed(); }
+    else if (shedFilter) { shedFilter = null; renderShed(); }
+  }
+}, { passive: true });
 
 /* voice — shared by the shed dump and the sunshine journal */
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;

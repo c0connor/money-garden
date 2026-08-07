@@ -1,4 +1,4 @@
-const CACHE = "money-garden-2026-08-06T16-26-44-459Z";
+const CACHE = "money-garden-2026-08-07T01-59-36-680Z";
 const ASSETS = ["./", "./index.html", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png", "./apple-touch-icon.png"];
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));
