@@ -283,11 +283,13 @@
   ul.rays li { background: var(--card); border-radius: 12px; box-shadow: var(--shadow); margin-bottom: 8px; }
   .ray-row { display: flex; align-items: baseline; gap: 11px; padding: 11px 14px; }
   .ray-row .r-emoji { font-size: 17px; }
-  .ray-row .r-text { flex: 1; min-width: 0; font-size: 14.5px; cursor: pointer; overflow-wrap: anywhere; }
+  .ray-row .r-text { flex: 1; min-width: 0; font-size: 14.5px; cursor: pointer; overflow-wrap: anywhere; white-space: pre-wrap; }
+  .ray-row .r-text.clamp { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   .ray-row .r-when { font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+  .ray-pen { background: none; border: none; color: var(--muted); font-size: 14px; padding: 2px 5px; }
   .ray-edit { padding: 11px 14px; display: grid; gap: 9px; }
-  .ray-edit input { font: inherit; font-size: 14px; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; width: 100%; }
-  .ray-edit input:focus { outline: 2px solid var(--sun); border-color: transparent; }
+  .ray-edit input, .ray-edit textarea { font: inherit; font-size: 14px; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; width: 100%; resize: vertical; }
+  .ray-edit input:focus, .ray-edit textarea:focus { outline: 2px solid var(--sun); border-color: transparent; }
   .ray-edit .sunbtn { font-size: 13px; font-weight: 600; color: var(--sun-ink); background: var(--sun-soft); border: none; border-radius: 8px; padding: 6px 14px; }
 
   /* ledger */
@@ -449,7 +451,7 @@
   <section id="shed" aria-label="Potting shed" hidden>
     <div class="dump">
       <div class="dump-row">
-        <input id="dumpInput" maxlength="200" placeholder="Toss a seed — anything on your mind…" aria-label="Brain dump">
+        <input id="dumpInput" maxlength="1000" placeholder="Toss a seed — anything on your mind…" aria-label="Brain dump">
         <button id="micBtn" type="button" title="Speak it instead">🎙️</button>
       </div>
       <p class="dump-hint" id="dumpHint">Press return — it lands in the Seed tray 🫘, file it later or never.</p>
@@ -463,7 +465,7 @@
     <div class="sunbox">
       <p class="sun-q">One good thing from today ☀️</p>
       <div class="dump-row">
-        <input id="sunInput" maxlength="300" placeholder="It counts, no matter how small…" aria-label="Today's good thing">
+        <input id="sunInput" maxlength="2000" placeholder="It counts, no matter how small…" aria-label="Today's good thing">
         <button id="sunMicBtn" type="button" title="Speak it instead">🎙️</button>
       </div>
       <p class="dump-hint" id="sunHint">Press return to keep it. Missed days don't matter — the sun comes back.</p>
@@ -1571,7 +1573,7 @@ function seedRow(t, onBench) {
     const subChips = t.tray === "orchard"
       ? `<div class="tray-chips">${ORCHARD_SUBS.map(s => `<button type="button" class="tray-chip${t.sub === s ? " on" : ""}" data-sub="${s}">${s}</button>`).join("")}</div>` : "";
     return `<li data-task="${esc(t.id)}"><div class="seed-edit">
-      <input class="se-text" value="${esc(t.text)}" maxlength="200" aria-label="Seed text">
+      <input class="se-text" value="${esc(t.text)}" maxlength="1000" aria-label="Seed text">
       <div class="tray-chips">${trayChips}</div>${subChips}
       <div class="seed-actions">
         <button type="button" class="sbtn" data-act="saveSeed">Save</button>
@@ -1674,7 +1676,7 @@ function renderShed() {
 }
 
 function addTask(text) {
-  const clean = text.trim().slice(0, 200);
+  const clean = text.trim().slice(0, 1000);
   if (!clean) return;
   const trayId = shedFilter && shedFilter !== "unsorted" ? shedFilter : null;
   const t = { id: uid(), text: clean, tray: trayId, sub: null, today: null, status: "open", createdAt: Date.now(), doneAt: null };
@@ -1733,7 +1735,7 @@ $("#shed").addEventListener("click", e => {
   } else if (act === "cancelSeed") {
     editingTaskId = null; renderShed();
   } else if (act === "saveSeed") {
-    const text = li.querySelector(".se-text").value.trim().slice(0, 200);
+    const text = li.querySelector(".se-text").value.trim().slice(0, 1000);
     if (text) t.text = text;
     editingTaskId = null;
     markChanged(); persist(); renderShed();
@@ -1858,10 +1860,12 @@ wireMic($("#sunMicBtn"), $("#sunInput"), $("#sunHint"),
 
 /* ═══════════ sunshine journal ═══════════ */
 let editingSunId = null;
+const expandedSuns = new Set();
+const RAY_LONG = 140;
 const RAY_EMOJI = ["☀️", "🌤️", "🌞", "🌅"];
 
 function addSun(text) {
-  const clean = text.trim().slice(0, 300);
+  const clean = text.trim().slice(0, 2000);
   if (!clean) return;
   state.suns.push({ id: uid(), text: clean, date: todayISO(), createdAt: Date.now() });
   markChanged(); persist(); renderSun();
@@ -1880,7 +1884,7 @@ function renderSun() {
   for (const s of sorted) {
     if (s.id === editingSunId) {
       html += `<li data-sun="${esc(s.id)}"><div class="ray-edit">
-        <input class="ry-text" value="${esc(s.text)}" maxlength="300" aria-label="Edit this ray">
+        <textarea class="ry-text" rows="4" maxlength="2000" aria-label="Edit this ray">${esc(s.text)}</textarea>
         <div class="seed-actions">
           <button type="button" class="sunbtn" data-act="saveRay">Save</button>
           <button type="button" class="sbtn soft" data-act="cancelRay">Cancel</button>
@@ -1888,10 +1892,14 @@ function renderSun() {
         </div></div></li>`;
     } else {
       const em = RAY_EMOJI[hashStr(s.id) % RAY_EMOJI.length];
+      const isLong = s.text.length > RAY_LONG;
+      const expanded = expandedSuns.has(s.id);
       html += `<li data-sun="${esc(s.id)}"><div class="ray-row">
         <span class="r-emoji">${em}</span>
-        <span class="r-text" data-act="editRay">${esc(s.text)}</span>
-        <span class="r-when">${esc(fmtDay(s.date))}</span></div></li>`;
+        <span class="r-text${isLong && !expanded ? " clamp" : ""}" data-act="${isLong ? "toggleRay" : "editRay"}"
+          title="${isLong ? (expanded ? "Tap to fold it up" : "Tap to read the whole thing") : "Tap to edit"}">${esc(s.text)}</span>
+        <span class="r-when">${esc(fmtDay(s.date))}</span>
+        <button type="button" class="ray-pen" data-act="editRay" title="Edit this ray">✎</button></div></li>`;
     }
   }
   list.innerHTML = html + `</ul>`;
@@ -1906,10 +1914,11 @@ $("#sun").addEventListener("click", e => {
   const s = state.suns.find(x => x.id === li.dataset.sun);
   if (!s) return;
   const act = e.target.dataset.act;
-  if (act === "editRay") { editingSunId = s.id; renderSun(); const inp = $("#sun .ry-text"); if (inp) inp.focus(); }
+  if (act === "toggleRay") { expandedSuns.has(s.id) ? expandedSuns.delete(s.id) : expandedSuns.add(s.id); renderSun(); }
+  else if (act === "editRay") { editingSunId = s.id; renderSun(); const inp = $("#sun .ry-text"); if (inp) inp.focus(); }
   else if (act === "cancelRay") { editingSunId = null; renderSun(); }
   else if (act === "saveRay") {
-    const text = li.querySelector(".ry-text").value.trim().slice(0, 300);
+    const text = li.querySelector(".ry-text").value.trim().slice(0, 2000);
     if (text) s.text = text;
     editingSunId = null;
     markChanged(); persist(); renderSun();
@@ -1921,7 +1930,7 @@ $("#sun").addEventListener("click", e => {
   }
 });
 $("#sun").addEventListener("keydown", e => {
-  if (e.key === "Enter" && e.target.classList.contains("ry-text")) { e.preventDefault(); e.target.closest("li").querySelector("[data-act=saveRay]").click(); }
+  /* Enter makes a new line in the ray editor (it's a paragraph now) — save via the button */
   if (e.key === "Escape" && editingSunId) { editingSunId = null; renderSun(); }
 });
 
