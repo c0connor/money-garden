@@ -262,6 +262,8 @@
   .tray-view .tv-name { font-weight: 600; font-size: 15px; }
   .tray-view .tv-hint { font-size: 11.5px; color: var(--muted); }
   .tray-view .sbtn { margin-left: auto; white-space: nowrap; }
+  .pick-mix { font-size: 12.5px; color: var(--muted); margin: -2px 4px 10px; }
+  .heart-nudge { font-size: 12.5px; color: var(--muted); margin: 8px 4px 0; }
   .pick-head { display: flex; align-items: center; gap: 12px; margin: 0 0 10px; }
   .pick-count { font-size: 12.5px; color: var(--muted); }
   .seed-row.pickable { cursor: pointer; }
@@ -1565,6 +1567,10 @@ const tsDay = ts => { const d = new Date(ts); return `${d.getFullYear()}-${pad(d
 const trayById = id => state.trays.find(t => t.id === id);
 const openTasks = () => state.tasks.filter(t => t.status === "open");
 const benchTasks = () => openTasks().filter(t => t.today === todayISO());
+/* heart seeds = the orchard + pollination: her own art and its reach */
+const isHeart = t => t.tray === "orchard" || t.tray === "pollen";
+const bloomedToday = () => state.tasks.filter(t => t.status === "done" && t.doneAt && tsDay(t.doneAt) === todayISO());
+const heartHappenedToday = () => benchTasks().some(isHeart) || bloomedToday().some(isHeart);
 
 function seedRow(t, onBench) {
   if (t.id === editingTaskId) {
@@ -1598,12 +1604,22 @@ function renderShed() {
 
   /* ── pick mode: the morning glance — everything laid out, tap three ── */
   if (pickMode) {
+    const paidWindow = sumCents(paidEntries().filter(inWindow));
+    const mix = paidWindow >= state.goalCents
+      ? "🌸 Full bloom — let the heart seeds have the bench today"
+      : paidWindow >= state.floorCents
+        ? "🌱 Expenses covered — try 1 sustain + 2 heart 💛"
+        : "🌧️ Money first right now — 2 sustain + 1 heart, never zero heart";
     $("#bench").innerHTML = `<h2 class="shed-head">Pick today's three 🌤️ — tap anything that calls to you</h2>
+      <p class="pick-mix">${mix}</p>
       <div class="pick-head"><span class="pick-count">${bench.length} of 3 on the bench</span>
       <button type="button" class="sbtn" data-act="pickDone">Done picking</button></div>`;
     $("#trayGrid").innerHTML = "";
     const groups = [{ emoji: "🫘", name: "Seed tray", tasks: open.filter(t => !t.tray) }]
-      .concat(state.trays.map(tr => ({ emoji: tr.emoji, name: tr.name, tasks: open.filter(t => t.tray === tr.id) })));
+      .concat(["orchard", "pollen", "weeding", "crops"].map(id => {
+        const tr = trayById(id);
+        return { emoji: tr.emoji, name: tr.name + (id === "orchard" || id === "pollen" ? " 💛" : ""), tasks: open.filter(t => t.tray === id) };
+      }));
     let html = "";
     for (const g of groups) {
       if (!g.tasks.length) continue;
@@ -1626,6 +1642,13 @@ function renderShed() {
   if (bench.length) benchHtml += `<ul class="seeds">${bench.map(t => seedRow(t, true)).join("")}</ul>`;
   else benchHtml += `<p class="bench-empty">${open.length ? "The bench is empty." : "Toss a few seeds in first — then pick your three."}</p>`;
   if (open.length && bench.length < 3) benchHtml += `<button type="button" class="sbtn" data-act="pickStart" style="margin-top:6px">🌤️ ${bench.length ? "Adjust the bench" : "Pick today's three"}</button>`;
+  if (!heartHappenedToday()) {
+    const orc = trayById("orchard").name, pol = trayById("pollen").name;
+    const heartSeedsExist = open.some(isHeart);
+    benchHtml += `<p class="heart-nudge">🍎 ${heartSeedsExist
+      ? `No heart seed today yet — one from ${esc(orc)} or ${esc(pol)} keeps the dream growing. Even 15 minutes counts.`
+      : `The heart trays are empty — toss even a tiny seed for ${esc(orc)} or ${esc(pol)}.`}</p>`;
+  }
   if (doneToday.length) {
     benchHtml += `<div><button type="button" class="bloomed-btn" data-act="toggleBloomed">${"🌼".repeat(Math.min(doneToday.length, 12))} ${doneToday.length} bloomed today ${showBloomed ? "▾" : "▸"}</button></div>`;
     if (showBloomed) benchHtml += `<ul class="seeds bloomed-list">${doneToday.map(t =>
@@ -1719,9 +1742,12 @@ $("#shed").addEventListener("click", e => {
     return;
   }
   if (act === "bloom") {
+    const firstHeart = isHeart(t) && !bloomedToday().some(isHeart);
     t.status = "done"; t.doneAt = Date.now();
     markChanged(); persist(); renderShed();
-    showToast(`Bloomed 🌼 “${t.text.slice(0, 40)}${t.text.length > 40 ? "…" : ""}”`, {
+    showToast(firstHeart
+      ? `A heart seed bloomed 💛 — ${trayById(t.tray).name} grows`
+      : `Bloomed 🌼 “${t.text.slice(0, 40)}${t.text.length > 40 ? "…" : ""}”`, {
       actionLabel: "Undo", onAction: () => { t.status = "open"; t.doneAt = null; markChanged(); persist(); renderShed(); }
     });
   } else if (act === "sun") {
