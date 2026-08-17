@@ -354,6 +354,21 @@
   .inv-editor .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .inv-editor .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
   .inv-editor .hint { font-size: 12px; color: var(--muted); margin: -2px 2px 0; }
+  .ch-list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+  .ch-item { display: flex; align-items: flex-start; gap: 10px; background: var(--bg); border: 1.5px solid var(--line); border-radius: 12px; padding: 10px 12px; text-align: left; font: inherit; color: var(--ink); width: 100%; }
+  .ch-item:hover { border-color: var(--green); }
+  .ch-item .ch-text { flex: 1; white-space: pre-wrap; font-size: 13.5px; line-height: 1.4; }
+  .ch-item .ch-text b { display: block; font-size: 14.5px; }
+  .ch-item .ch-pen { font-size: 14px; color: var(--muted); background: none; border: none; padding: 2px 6px; flex: none; }
+  .ch-item .ch-pen:hover { color: var(--ink); }
+  .ch-empty { font-size: 13px; color: var(--muted); margin: 8px 0; }
+  .inv-sent { display: inline-flex; align-items: center; gap: 6px; font-size: 13.5px; color: var(--muted); }
+  .inv-sent input { width: 18px; height: 18px; }
+  .inv-void { font-size: 12.5px; color: var(--terracotta); background: none; border: none; padding: 4px 8px; }
+  .row .spill { font-size: 11px; background: var(--green-soft); color: var(--green-deep); padding: 2px 8px; border-radius: 999px; }
+  .row .voidpill { font-size: 11px; background: var(--line); color: var(--muted); padding: 2px 8px; border-radius: 999px; text-decoration: line-through; }
+  .paper.void { position: relative; }
+  .paper.void::after { content: "VOID"; position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%) rotate(-24deg); font-size: 96px; font-weight: 700; color: rgba(165, 78, 40, .18); letter-spacing: 8px; pointer-events: none; }
   .inv-editing-hint { text-align: center; font-size: 12.5px; color: var(--muted); margin: 0 0 6px; }
   .inv-editing-hint[hidden] { display: none; }
   .paper .ed { outline: 1.5px dashed #c9c2b0; outline-offset: 3px; border-radius: 3px; min-width: 24px; display: inline-block; }
@@ -546,8 +561,8 @@
     <div class="setrow"><input id="trayName3" maxlength="24" aria-label="Tray 4 name"> <span id="trayHint3"></span></div>
 
     <h3>Invoices 🧾</h3>
-    <p class="soft">This info lives only on this device (and in your backups) — never in the app's code.</p>
-    <p style="margin-top:8px"><b>Your billing block</b> — top of every invoice</p>
+    <p class="soft">This info lives only on this device (and in your backups) — never in the app's code. Every invoice asks who it's from and who it's to — tap a saved block or add a new one; the app remembers up to 12 of each.</p>
+    <p style="margin-top:8px"><b>Your default billing block</b> — offered first</p>
     <textarea id="bFrom" rows="5" placeholder="Your name&#10;Street&#10;City, ST 00000&#10;Phone&#10;Email"></textarea>
     <p style="margin-top:8px"><b>Payment terms</b> — the TERMS footer</p>
     <textarea id="bTerms" rows="5" placeholder="Venmo - @you&#10;Zelle - (000) 000 0000&#10;Bank transfer - …"></textarea>
@@ -574,6 +589,25 @@
     <div class="confirm-actions">
       <button class="btn ghost" id="confirmNo"></button>
       <button class="btn" id="confirmYes"></button>
+    </div>
+  </div>
+</div>
+
+<div id="chooser" class="overlay" hidden>
+  <div class="panel">
+    <h2 id="chTitle"></h2>
+    <p class="soft" id="chBody"></p>
+    <div id="chList" class="ch-list"></div>
+    <div id="chEditWrap" hidden>
+      <textarea id="chText" rows="5"></textarea>
+      <div class="confirm-actions" style="margin-top:10px">
+        <button class="btn ghost" id="chEditCancel">Back</button>
+        <button class="btn" id="chEditSave">Use this</button>
+      </div>
+    </div>
+    <div class="confirm-actions" id="chMainActions">
+      <button class="btn ghost" id="chCancel">Cancel</button>
+      <button class="btn ghost" id="chNew">+ New</button>
     </div>
   </div>
 </div>
@@ -608,7 +642,11 @@
     <div class="inv-actions" id="invMainActions">
       <button class="btn" id="invPrint">Print / save as PDF 🧾</button>
       <button class="btn ghost" id="invEdit">Edit ✎</button>
+      <label class="inv-sent"><input type="checkbox" id="invSentChk"> sent to client</label>
       <button class="btn ghost" data-close-inv>Done</button>
+    </div>
+    <div class="inv-actions" style="margin-top:0">
+      <button class="inv-void" id="invVoidBtn">void this invoice</button>
     </div>
   </div>
 </div>
@@ -683,7 +721,7 @@ const DEFAULTS = {
   goalCents: 0, floorCents: 0,
   entries: [], plots: [], hours: [],
   tasks: [], trays: DEFAULT_TRAYS, suns: [], room: "garden", timer: null,
-  billing: { from: "", terms: "", next: 1, dueDays: 7 },
+  billing: { from: "", terms: "", next: 1, dueDays: 7, froms: [], termsList: [], clients: [] },
   lastBackup: null, lastChange: null, nudgeSnooze: 0, celebrated: {}
 };
 function migrate(s) {
@@ -700,9 +738,15 @@ function migrate(s) {
   if (out.trays[0].name === "Weeding") out.trays[0].name = "Fertilizing";
   if (!Array.isArray(out.suns)) out.suns = [];
   if (!["garden", "shed", "sun"].includes(out.room)) out.room = "garden";
-  out.billing = { from: "", terms: "", next: 1, dueDays: 7, ...(s.billing || {}) };
+  out.billing = { from: "", terms: "", next: 1, dueDays: 7, froms: [], termsList: [], clients: [], ...(s.billing || {}) };
   if (!Number.isFinite(out.billing.next) || out.billing.next < 1) out.billing.next = 1;
   if (!Number.isFinite(out.billing.dueDays) || out.billing.dueDays < 0) out.billing.dueDays = 7;
+  const b = out.billing;
+  ["froms", "termsList", "clients"].forEach(k => { if (!Array.isArray(b[k])) b[k] = []; });
+  /* seed the saved-lists from what she already had, and from every plot's client */
+  if (b.from.trim() && !b.froms.includes(b.from)) b.froms.unshift(b.from);
+  if (b.terms.trim() && !b.termsList.includes(b.terms)) b.termsList.unshift(b.terms);
+  out.plots.forEach(p => { if (p.client && p.client.trim() && !b.clients.includes(p.client)) b.clients.push(p.client); });
   return out;
 }
 function load() {
@@ -806,8 +850,9 @@ async function doRestore(file) {
       id: e.id || uid(), project: String(e.project).slice(0, 120),
       amountCents: Number.isFinite(e.amountCents) ? Math.round(e.amountCents) : Math.round(e.amount * 100),
       date: e.date, createdAt: e.createdAt || Date.now(),
-      status: e.status === "waiting" ? "waiting" : "paid",
-      plotId: e.plotId, hourIds: e.hourIds
+      status: e.status === "waiting" ? "waiting" : e.status === "void" ? "void" : "paid",
+      plotId: e.plotId, hourIds: e.hourIds,
+      invoiceNo: e.invoiceNo, inv: e.inv, invSent: e.invSent, invSentAt: e.invSentAt, invVoid: e.invVoid, clientText: e.clientText
     })),
     plots: Array.isArray(obj.plots) ? obj.plots : [],
     hours: Array.isArray(obj.hours) ? obj.hours : [],
@@ -925,25 +970,74 @@ function addDaysISO(iso, days) {
   const dt = new Date(y, m - 1, d + days);
   return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`;
 }
+/* ── the chooser: pick a saved block, add a new one, or edit one ── */
+function showChooser({ title, body, items, placeholder, allowSkip }) {
+  return new Promise(resolve => {
+    const box = $("#chooser"), list = $("#chList");
+    $("#chTitle").textContent = title; $("#chBody").textContent = body;
+    let editingIndex = null;
+    const showList = () => {
+      $("#chEditWrap").hidden = true; $("#chMainActions").hidden = false; list.hidden = false;
+      list.innerHTML = items.length
+        ? items.map((t, i) => {
+            const lines = t.split("\n");
+            return `<div class="ch-item"><button type="button" style="border:none;padding:0;background:none;flex:1;text-align:left;font:inherit;color:inherit;cursor:pointer" data-pick="${i}"><span class="ch-text"><b>${esc(lines[0])}</b>${esc(lines.slice(1).join("\n"))}</span></button><button type="button" class="ch-pen" data-edit="${i}" title="Edit">✎</button></div>`;
+          }).join("")
+        : `<p class="ch-empty">Nothing saved yet — add one below.</p>`;
+      $("#chNew").textContent = items.length ? "+ New" : "+ Add";
+      $("#chCancel").textContent = allowSkip ? "Skip" : "Cancel";
+    };
+    const showEdit = (i) => {
+      editingIndex = i;
+      list.hidden = true; $("#chMainActions").hidden = true; $("#chEditWrap").hidden = false;
+      const ta = $("#chText"); ta.value = i === null ? "" : items[i]; ta.placeholder = placeholder || ""; ta.focus();
+    };
+    const done = v => { box.hidden = true; box.onclick = null; list.onclick = null; resolve(v); };
+    list.onclick = e => {
+      const pick = e.target.closest("[data-pick]"), edit = e.target.closest("[data-edit]");
+      if (edit) { showEdit(+edit.dataset.edit); return; }
+      if (pick) done({ text: items[+pick.dataset.pick], index: +pick.dataset.pick });
+    };
+    $("#chNew").onclick = () => showEdit(null);
+    $("#chCancel").onclick = () => done(null);
+    $("#chEditCancel").onclick = () => showList();
+    $("#chEditSave").onclick = () => {
+      const v = $("#chText").value.trim();
+      if (!v) { showList(); return; }
+      done({ text: v, index: editingIndex, edited: editingIndex !== null });
+    };
+    box.onclick = e => { if (e.target === box) done(null); };
+    box.hidden = false; showList();
+  });
+}
+/* remember a block in a saved list (most-recent first); an edit replaces its old slot */
+function rememberBlock(listKey, res) {
+  const arr = state.billing[listKey];
+  if (res.edited && res.index !== null && res.index >= 0 && res.index < arr.length) arr.splice(res.index, 1);
+  const i = arr.indexOf(res.text); if (i >= 0) arr.splice(i, 1);
+  arr.unshift(res.text);
+  if (arr.length > 12) arr.length = 12;
+}
 async function ensureBilling() {
-  if (!state.billing.from.trim()) {
-    const v = await showPrompt({ title: "Your billing block 🧾", body: "Shown at the top of every invoice — your name, address, phone, email, one per line. Edit anytime in the ? panel.", placeholder: "Your name\nStreet\nCity, ST 00000\nPhone\nEmail" });
-    if (v === null) return false;
-    state.billing.from = v;
-  }
-  if (!state.billing.terms.trim()) {
-    const v = await showPrompt({ title: "Payment terms 💳", body: "The TERMS footer — how clients pay you.", placeholder: "Venmo - @you\nZelle - (000) 000 0000\nBank transfer - …" });
-    if (v === null) return false;
-    state.billing.terms = v;
-  }
+  const b = state.billing;
+  const rf = await showChooser({ title: "Invoice from 🧾", body: "Whose name goes at the top? Tap a saved block, or add another (a second business, a stage name…). ✎ to edit.", items: b.froms, placeholder: "Your name\nStreet\nCity, ST 00000\nPhone\nEmail" });
+  if (rf === null) return false;
+  rememberBlock("froms", rf); b.from = rf.text;
+  const rt = await showChooser({ title: "Payment terms 💳", body: "The TERMS footer — how they pay you.", items: b.termsList, placeholder: "Venmo - @you\nZelle - (000) 000 0000\nBank transfer - …" });
+  if (rt === null) return false;
+  rememberBlock("termsList", rt); b.terms = rt.text;
   persist();
   return true;
 }
 async function ensureClient(p) {
-  if (p.client && p.client.trim()) return true;
-  const v = await showPrompt({ title: `Who gets “${p.name}” invoices?`, body: "Their billing block — company, contact, address. Saved on this plot; edit it anytime via the plot's edit.", placeholder: "Company\nContact name\nStreet\nCity, ST 00000" });
-  if (v === null) return false;
-  p.client = v; persist();
+  const b = state.billing;
+  /* a plot she's already billed keeps its client silently */
+  if (p.client && p.client.trim() && p.clientConfirmed) return true;
+  const items = p.client && p.client.trim() && !b.clients.includes(p.client) ? [p.client, ...b.clients] : b.clients.slice();
+  const rc = await showChooser({ title: `Bill “${p.name}” to…`, body: "Tap a saved client or add a new one. It's remembered on this plot; ✎ to fix details.", items, placeholder: "Company\nContact name\nStreet\nCity, ST 00000" });
+  if (rc === null) return false;
+  rememberBlock("clients", rc); p.client = rc.text; p.clientConfirmed = true;
+  persist();
   return true;
 }
 const invBlock = s => esc(s).replace(/\n/g, "<br>");
@@ -974,7 +1068,7 @@ function invoiceData(entry) {
     unit: o.unit !== undefined ? o.unit : unit,
     qty: o.qty !== undefined ? o.qty : qty,
     period: o.period !== undefined ? o.period : period,
-    client: p && p.client ? p.client : "",
+    client: p && p.client ? p.client : (entry.clientText || ""),
     from: b.from || "", terms: b.terms || "",
     amountCents: entry.amountCents, plot: p, hours, rateCents, isHourly: hours !== null
   };
@@ -996,6 +1090,10 @@ function buildInvoice(entry, editing = false) {
   $("#invEditor").hidden = !(editing && d.isHourly);
   $("#invEditingHint").hidden = !editing;
   $("#invMainActions").hidden = editing;
+  $("#invSentChk").checked = !!entry.invSent;
+  $("#invVoidBtn").textContent = entry.invVoid ? "un-void this invoice" : "void this invoice";
+  $("#invVoidBtn").parentElement.hidden = editing;
+  $("#invPaper").classList.toggle("void", !!entry.invVoid);
   if (editing && d.isHourly) { $("#ieRate").value = d.rateCents / 100; $("#ieHours").value = d.hours; }
   if (editing && !d.isHourly) { $("#invEditor").hidden = false; $("#ieRate").parentElement.parentElement.hidden = true; $("#ieHoursHint").hidden = true; }
   else if (editing) { $("#ieRate").parentElement.parentElement.hidden = false; $("#ieHoursHint").hidden = false; }
@@ -1038,6 +1136,33 @@ function parseSlash(s) {
   return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`;
 }
 $("#invPrint").addEventListener("click", () => window.print());
+$("#invSentChk").addEventListener("change", () => {
+  const entry = state.entries.find(x => x.id === invoiceEntryId);
+  if (!entry) return;
+  entry.invSent = $("#invSentChk").checked; if (entry.invSent) entry.invSentAt = Date.now();
+  markChanged(); persist(); renderList();
+  showToast(entry.invSent ? "Marked as sent ✉️" : "Marked as not sent yet");
+});
+$("#invVoidBtn").addEventListener("click", async () => {
+  const entry = state.entries.find(x => x.id === invoiceEntryId);
+  if (!entry) return;
+  if (!entry.invVoid) {
+    const ok = await showConfirm({ title: "Void this invoice?", body: `${fmtInvoiceNo(entry.invoiceNo)} keeps its number (so your sequence stays honest for accountants) but is stamped VOID and stops counting as money waiting. Its hours go back to unbilled.`, yes: "Void it", no: "Keep it" });
+    if (!ok) return;
+    entry.invVoid = true; entry.status = "void";
+    if (entry.hourIds) state.hours.forEach(h => { if (entry.hourIds.includes(h.id)) h.invoiced = false; });
+    const p = entry.plotId ? plotById(entry.plotId) : null;
+    if (p && p.kind === "flat" && p.status === "sent") p.status = "growing";
+  } else {
+    entry.invVoid = false; entry.status = "waiting";
+    if (entry.hourIds) state.hours.forEach(h => { if (entry.hourIds.includes(h.id)) h.invoiced = true; });
+    const p = entry.plotId ? plotById(entry.plotId) : null;
+    if (p && p.kind === "flat" && p.status === "growing") p.status = "sent";
+  }
+  markChanged(); persist(); render();
+  buildInvoice(entry);
+  showToast(entry.invVoid ? "Voided — number kept, money uncounted 🍂" : "Back in play ✓");
+});
 $("#invoiceView").addEventListener("click", e => {
   if (e.target === $("#invoiceView") || e.target.hasAttribute("data-close-inv")) $("#invoiceView").hidden = true;
 });
@@ -1370,17 +1495,17 @@ function renderList() {
           <div class="edit-actions">
             <button type="submit" class="save">Save</button>
             ${e.status === "waiting" ? `<button type="button" class="markpaid">Mark paid 🌻</button>` : ""}
-            ${e.invoiceNo ? `<button type="button" class="invview">🧾 ${esc(fmtInvoiceNo(e.invoiceNo))}</button>` : ""}
+            ${e.invoiceNo ? `<button type="button" class="invview">🧾 ${esc(fmtInvoiceNo(e.invoiceNo))}${e.invVoid ? " (void)" : ""}</button>` : (e.status === "waiting" ? `<button type="button" class="invview mkinv">Create invoice 🧾</button>` : "")}
             <button type="button" class="cancel">Cancel</button>
             <button type="button" class="remove">remove 🥀</button>
           </div></form></li>`;
       } else {
-        const waiting = e.status === "waiting";
-        html += `<li data-id="${esc(e.id)}" class="${waiting ? "waiting" : ""}">
+        const waiting = e.status === "waiting", isVoid = e.status === "void";
+        html += `<li data-id="${esc(e.id)}" class="${waiting || isVoid ? "waiting" : ""}"${isVoid ? ' style="opacity:.6"' : ""}>
           <div class="row" role="button" tabindex="0" aria-label="Edit ${esc(e.project)}">
-          <span class="emoji">${waiting ? "🌸" : flowerFor(e.amountCents)}</span>
-          <div class="proj"><div class="name">${esc(e.project)}</div><div class="when">${esc(fmtDay(e.date))}</div></div>
-          ${waiting ? `<span class="wpill">waiting</span>` : ""}
+          <span class="emoji">${isVoid ? "🍂" : waiting ? "🌸" : flowerFor(e.amountCents)}</span>
+          <div class="proj"><div class="name">${esc(e.project)}</div><div class="when">${esc(fmtDay(e.date))}${e.invoiceNo ? ` · ${esc(fmtInvoiceNo(e.invoiceNo))}` : ""}</div></div>
+          ${isVoid ? `<span class="voidpill">void</span>` : waiting ? (e.invSent ? `<span class="spill">sent ✉️</span>` : `<span class="wpill">waiting</span>`) : ""}
           <span class="amt">${esc(fmtMoney(e.amountCents))}</span></div></li>`;
       }
     }
@@ -1554,9 +1679,14 @@ $("#plots").addEventListener("click", async e => {
     showToast("Updated 🌿"); return;
   }
   if (act === "send") {
+    const wantInvoice = await showConfirm({
+      title: "Delivered 🌸 — make an invoice?",
+      body: `${fmtMoney(p.rateCents)} for “${p.name}” will sit as waiting until it's paid. Want the invoice document too? (You can always make one later from the ledger.)`,
+      yes: "Make the invoice", no: "Just mark it sent"
+    });
     p.status = "sent";
     const entry = { id: uid(), project: p.name.slice(0, 120), amountCents: p.rateCents, date: todayISO(), createdAt: Date.now(), status: "waiting", plotId: p.id };
-    const withDoc = await ensureBilling() && await ensureClient(p);
+    const withDoc = wantInvoice && await ensureBilling() && await ensureClient(p);
     if (withDoc) { entry.invoiceNo = state.billing.next; state.billing.next++; }
     state.entries.push(entry);
     markChanged(); persist(); render();
@@ -1591,7 +1721,7 @@ $("#plots").addEventListener("click", async e => {
     state.entries.push(entry);
     markChanged(); persist(); render();
     if (withDoc) { buildInvoice(entry); showToast(`${fmtInvoiceNo(entry.invoiceNo)} ready 🧾 ${fmtMoney(amount)} waiting to be paid`); }
-    else showToast(`Invoice noted 🧾 ${fmtMoney(amount)} waiting — fill the ? panel's invoice info to get documents`);
+    else showToast(`${fmtMoney(amount)} parked as waiting — tap it in the ledger anytime to create the invoice 🧾`);
     return;
   }
   if (act === "wilt") {
@@ -1629,7 +1759,25 @@ $("#list").addEventListener("click", e => {
   if (e.target.classList.contains("remove")) { removeEntry(id); return; }
   if (e.target.classList.contains("invview")) {
     const en = state.entries.find(x => x.id === id);
-    if (en) buildInvoice(en);
+    if (!en) return;
+    if (en.invoiceNo) { buildInvoice(en); return; }
+    /* the odd-bird rescue: make an invoice for a waiting entry that skipped it */
+    (async () => {
+      const p = en.plotId ? plotById(en.plotId) : null;
+      const ok = await ensureBilling();
+      if (!ok) return;
+      if (p) { const okc = await ensureClient(p); if (!okc) return; }
+      else {
+        const rc = await showChooser({ title: `Bill “${en.project}” to…`, body: "Tap a saved client or add a new one.", items: state.billing.clients.slice(), placeholder: "Company\nContact name\nStreet\nCity, ST 00000" });
+        if (rc === null) return;
+        rememberBlock("clients", rc); en.clientText = rc.text;
+      }
+      en.invoiceNo = state.billing.next; state.billing.next++;
+      editingId = null;
+      markChanged(); persist(); render();
+      buildInvoice(en);
+      showToast(`${fmtInvoiceNo(en.invoiceNo)} ready 🧾`);
+    })();
     return;
   }
   if (e.target.classList.contains("markpaid")) {
@@ -1703,8 +1851,18 @@ $("#floorInput").addEventListener("change", () => {
   const v = parseAmount($("#floorInput").value);
   if (v) { state.floorCents = v; markChanged(); persist(); render(); showToast(`Expenses line set at ${fmtMoney(v)} 🌱`); }
 });
-$("#bFrom").addEventListener("change", () => { state.billing.from = $("#bFrom").value.trim().slice(0, 600); markChanged(); persist(); });
-$("#bTerms").addEventListener("change", () => { state.billing.terms = $("#bTerms").value.trim().slice(0, 600); markChanged(); persist(); });
+$("#bFrom").addEventListener("change", () => {
+  const v = $("#bFrom").value.trim().slice(0, 600); const old = state.billing.from;
+  state.billing.from = v;
+  if (v) rememberBlock("froms", { text: v, index: state.billing.froms.indexOf(old), edited: old !== v && state.billing.froms.includes(old) });
+  markChanged(); persist();
+});
+$("#bTerms").addEventListener("change", () => {
+  const v = $("#bTerms").value.trim().slice(0, 600); const old = state.billing.terms;
+  state.billing.terms = v;
+  if (v) rememberBlock("termsList", { text: v, index: state.billing.termsList.indexOf(old), edited: old !== v && state.billing.termsList.includes(old) });
+  markChanged(); persist();
+});
 $("#bNext").addEventListener("change", () => {
   const v = parseInt($("#bNext").value.replace(/\D/g, ""), 10);
   if (v >= 1) { state.billing.next = v; markChanged(); persist(); render(); showToast(`Next invoice will be ${fmtInvoiceNo(v)} 🧾`); }
