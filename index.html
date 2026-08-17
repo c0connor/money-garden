@@ -149,7 +149,11 @@
   @media (max-width: 600px) { .addForm { grid-template-columns: 1fr 1fr !important; } .addForm .wide { grid-column: 1 / -1; } }
   .field, .amount-wrap { min-width: 0; }
   .field label { display: block; font-size: 11px; color: var(--muted); margin: 0 0 4px 2px; letter-spacing: .03em; }
-  .field input, .field select { width: 100%; min-width: 0; font: inherit; font-size: 15px; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; }
+  .field input, .field select { width: 100%; min-width: 0; font: inherit; font-size: 15px; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; height: 42px; box-sizing: border-box; }
+  /* iOS draws date pickers taller and centered — pin them to the same box as the text inputs */
+  input[type="date"] { -webkit-appearance: none; appearance: none; height: 42px; line-height: 22px; display: flex; align-items: center; }
+  input[type="date"]::-webkit-date-and-time-value { text-align: left; margin: 0; }
+  .editForm input[type="date"], .water-row input[type="date"], .hlog-edit input[type="date"] { height: auto; min-height: 36px; }
   .field input:focus, .field select:focus { outline: 2px solid var(--green); outline-offset: 0; border-color: transparent; }
   .amount-wrap { position: relative; }
   .amount-wrap .cur { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 15px; pointer-events: none; }
@@ -1391,7 +1395,9 @@ function plotCard(p) {
       <div><div class="nl">rate</div><div class="nv">${esc(fmtMoney(p.rateCents))}<small>/hr</small></div></div>
       ${hoursCell("hours ever")}
       <div><div class="nl">unbilled</div><div class="nv">${esc(fmtMoney(Math.round(un * p.rateCents)))}</div></div>`;
-    if (un > 0) statusActs = `<button class="pbtn" data-act="invoice">Invoice these →</button>`;
+    statusActs = un > 0
+      ? `<button class="pbtn" data-act="invoice">Invoice these →</button>`
+      : `<button class="pbtn soft" data-act="invoiceNone" title="Log hours first — then this makes the invoice">Invoice these →</button>`;
   } else {
     emoji = "🪴";
     pill = p.status === "sent" ? `<span class="pill sent">sent · waiting</span>` : `<span class="pill growing">growing</span>`;
@@ -1399,7 +1405,7 @@ function plotCard(p) {
       <div><div class="nl">project rate</div><div class="nv">${esc(fmtMoney(p.rateCents))}</div></div>
       ${hoursCell("hours so far")}
       <div><div class="nl">real hourly</div><div class="nv">${rh !== null ? esc(fmtMoney(rh)) + "<small>/hr</small>" : "—"}</div></div>`;
-    if (p.status === "growing") statusActs = `<button class="pbtn" data-act="send">Mark sent 🌸</button>`;
+    if (p.status === "growing") statusActs = `<button class="pbtn" data-act="send">Invoice / send 🌸</button>`;
     if (p.status === "sent") statusActs = `<button class="pbtn" data-act="paid">Mark paid 🌻</button>`;
   }
   const timerActs = timerHere
@@ -1582,6 +1588,10 @@ $("#plots").addEventListener("click", async e => {
   const p = plotById(card.dataset.plot);
   if (!p) return;
   const act = e.target.closest("[data-act]")?.dataset.act;
+  if (act === "invoiceNone") {
+    showToast(plotHours(p.id) > 0 ? "Everything here is already invoiced ✓ — log new hours to bill again" : "Nothing to bill yet — hit ▶ Timer or + hours first 💧");
+    return;
+  }
   if (act === "timerStart") {
     if (state.timer) {
       const running = plotById(state.timer.plotId);
