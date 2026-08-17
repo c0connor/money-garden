@@ -346,7 +346,15 @@
 
   /* ---------- invoice paper ---------- */
   #invoiceView { align-items: flex-start; overflow-y: auto; }
-  .inv-actions { display: flex; gap: 10px; justify-content: center; margin: 16px 0 8px; }
+  .inv-actions { display: flex; gap: 10px; justify-content: center; margin: 16px 0 8px; flex-wrap: wrap; }
+  .inv-editor { background: var(--card); color: var(--ink); border-radius: 14px; box-shadow: var(--shadow); max-width: 620px; margin: 0 auto 6px; padding: 14px 16px; display: grid; gap: 10px; }
+  .inv-editor label { display: block; font-size: 11px; color: var(--muted); letter-spacing: .03em; margin-bottom: 4px; }
+  .inv-editor input, .inv-editor textarea { width: 100%; font: inherit; font-size: 14px; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; resize: vertical; }
+  .inv-editor input:focus, .inv-editor textarea:focus { outline: 2px solid var(--green); border-color: transparent; }
+  .inv-editor .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .inv-editor .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+  .inv-editor .hint { font-size: 12px; color: var(--muted); margin: -2px 2px 0; }
+  @media (max-width: 480px) { .inv-editor .row3 { grid-template-columns: 1fr 1fr; } }
   .paper { background: #fff; color: #1c1c1c; width: 100%; max-width: 620px; border-radius: 8px; padding: 38px 40px; margin: 18px auto 8px; font-size: 13px; line-height: 1.45; }
   .paper h1 { font-size: 36px; font-weight: 400; text-align: right; margin: 0 0 26px; color: #1c1c1c; letter-spacing: 1px; }
   .inv-lab { font-size: 10px; font-weight: 700; letter-spacing: .08em; color: #8a8a8a; text-transform: uppercase; }
@@ -546,7 +554,7 @@
       <input id="curInput" class="tiny" maxlength="4" aria-label="Currency symbol"> <span>shown before every amount</span>
     </div>
 
-    <p class="soft" style="margin-top:20px">Grown in Christina's garden 🌱 · v2 · updated Aug 14 · works offline forever</p>
+    <p class="soft" style="margin-top:20px">Grown in Christina's garden 🌱 · v2 · updated Aug 17 · works offline forever</p>
   </div>
 </div>
 
@@ -576,8 +584,29 @@
 <div id="invoiceView" class="overlay" hidden>
   <div style="width:100%">
     <div id="invPaper" class="paper"></div>
-    <div class="inv-actions">
+    <div id="invEditor" class="inv-editor" hidden>
+      <div class="row3">
+        <div><label for="ieNo">Invoice number</label><input id="ieNo" inputmode="numeric"></div>
+        <div><label for="ieIssue">Date of issue</label><input id="ieIssue" type="date"></div>
+        <div><label for="ieDue">Due date</label><input id="ieDue" type="date"></div>
+      </div>
+      <div class="row2">
+        <div><label for="ieDesc">Description</label><input id="ieDesc" maxlength="120"></div>
+        <div><label for="ieAmt">Amount</label><input id="ieAmt" inputmode="decimal"></div>
+      </div>
+      <div><label for="iePeriod">Second line (work period, notes)</label><input id="iePeriod" maxlength="160" placeholder="Work for 7/18/26 - 7/31/26"></div>
+      <div><label for="ieClient">Billed to</label><textarea id="ieClient" rows="4"></textarea></div>
+      <div><label for="ieFrom">Your block</label><textarea id="ieFrom" rows="4"></textarea></div>
+      <div><label for="ieTerms">Terms</label><textarea id="ieTerms" rows="4"></textarea></div>
+      <p class="hint">Client, your block, and terms save back to the plot and your settings, so next time starts right. Number, dates, description, and amount are this invoice's own — the running tally continues from whatever number you set.</p>
+      <div class="inv-actions" style="margin:4px 0 0">
+        <button class="btn" id="ieSave">Save changes</button>
+        <button class="btn ghost" id="ieCancel">Cancel</button>
+      </div>
+    </div>
+    <div class="inv-actions" id="invMainActions">
       <button class="btn" id="invPrint">Print / save as PDF 🧾</button>
+      <button class="btn ghost" id="invEdit">Edit ✎</button>
       <button class="btn ghost" data-close-inv>Done</button>
     </div>
   </div>
@@ -917,34 +946,52 @@ async function ensureClient(p) {
   return true;
 }
 const invBlock = s => esc(s).replace(/\n/g, "<br>");
-function buildInvoice(entry) {
+let invoiceEntryId = null;
+/* everything the paper shows, resolved from entry + plot + settings, with per-invoice overrides (entry.inv) on top */
+function invoiceData(entry) {
   const p = entry.plotId ? plotById(entry.plotId) : null;
   const b = state.billing;
-  const fromLines = (b.from || "").split("\n");
-  const issue = entry.date;
-  const due = addDaysISO(issue, b.dueDays);
-  let rows, period = "";
+  const o = entry.inv || {};
+  let desc, unit, qty, period = "";
   if (entry.hourIds && p) {
     const logs = state.hours.filter(h => entry.hourIds.includes(h.id));
     const hrsSum = logs.reduce((a, h) => a + h.hours, 0) || (entry.amountCents / (p.rateCents || 1));
     const dates = logs.map(h => h.date).sort();
     if (dates.length) period = `Work for ${fmtSlash(dates[0])} - ${fmtSlash(dates[dates.length - 1])}`;
-    rows = `<tr><td>${esc(p.name)}</td><td class="num">${esc(fmtMoney(p.rateCents))}/hr</td><td class="num">${esc(fmtHours(hrsSum))}</td><td class="num">${esc(fmtMoney(entry.amountCents))}</td></tr>`;
+    desc = p.name; unit = fmtMoney(p.rateCents) + "/hr"; qty = fmtHours(hrsSum);
   } else {
     const dates = p ? state.hours.filter(h => h.plotId === p.id).map(h => h.date).sort() : [];
     if (dates.length) period = `Work for ${fmtSlash(dates[0])} - ${fmtSlash(dates[dates.length - 1])}`;
-    rows = `<tr><td>${esc(p ? p.name : entry.project)}</td><td class="num">${esc(fmtMoney(entry.amountCents))}</td><td class="num"></td><td class="num">${esc(fmtMoney(entry.amountCents))}</td></tr>`;
+    desc = p ? p.name : entry.project; unit = fmtMoney(entry.amountCents); qty = "";
   }
-  if (period) rows += `<tr><td colspan="4">${esc(period)}</td></tr>`;
+  return {
+    no: entry.invoiceNo,
+    issue: o.issue || entry.date,
+    due: o.due || addDaysISO(o.issue || entry.date, b.dueDays),
+    desc: o.desc !== undefined ? o.desc : desc,
+    unit, qty,
+    period: o.period !== undefined ? o.period : period,
+    client: p && p.client ? p.client : "",
+    from: b.from || "", terms: b.terms || "",
+    amountCents: entry.amountCents, plot: p
+  };
+}
+function buildInvoice(entry) {
+  invoiceEntryId = entry.id;
+  const d = invoiceData(entry);
+  const fromLines = d.from.split("\n");
+  let rows = `<tr><td>${esc(d.desc)}</td><td class="num">${esc(d.unit)}</td><td class="num">${esc(d.qty)}</td><td class="num">${esc(fmtMoney(d.amountCents))}</td></tr>`;
+  if (d.period) rows += `<tr><td colspan="4">${esc(d.period)}</td></tr>`;
+  $("#invEditor").hidden = true; $("#invMainActions").hidden = false;
   $("#invPaper").innerHTML = `
     <h1>INVOICE</h1>
     <div class="inv-meta">
-      <div><div class="inv-lab">Invoice number</div>${esc(fmtInvoiceNo(entry.invoiceNo))}</div>
-      <div><div class="inv-lab">Date of issue</div>${esc(fmtSlash(issue))}
-        <div class="inv-lab" style="margin-top:4px">Due date</div>${esc(fmtSlash(due))}</div>
+      <div><div class="inv-lab">Invoice number</div>${esc(fmtInvoiceNo(d.no))}</div>
+      <div><div class="inv-lab">Date of issue</div>${esc(fmtSlash(d.issue))}
+        <div class="inv-lab" style="margin-top:4px">Due date</div>${esc(fmtSlash(d.due))}</div>
     </div>
     <div class="inv-parties">
-      <div><div class="inv-lab" style="margin-bottom:4px">Billed to</div><div class="inv-block">${invBlock(p && p.client ? p.client : "")}</div></div>
+      <div><div class="inv-lab" style="margin-bottom:4px">Billed to</div><div class="inv-block">${invBlock(d.client)}</div></div>
       <div><div class="from-name">${esc(fromLines[0] || "")}</div><div class="inv-block">${invBlock(fromLines.slice(1).join("\n"))}</div></div>
     </div>
     <table class="inv-table">
@@ -952,22 +999,55 @@ function buildInvoice(entry) {
       ${rows}
     </table>
     <div class="inv-totals">
-      <div><div class="inv-lab">Invoice total</div><div class="inv-big">${esc(fmtMoney(entry.amountCents))}</div></div>
+      <div><div class="inv-lab">Invoice total</div><div class="inv-big">${esc(fmtMoney(d.amountCents))}</div></div>
       <div class="inv-sums">
-        <div><span class="lab">SUBTOTAL</span><span>${esc(fmtMoney(entry.amountCents))}</span></div>
+        <div><span class="lab">SUBTOTAL</span><span>${esc(fmtMoney(d.amountCents))}</span></div>
         <div><span class="lab">DISCOUNT</span><span>-${esc(fmtMoney(0))}</span></div>
         <div><span class="lab">(TAX RATE)</span><span>0%</span></div>
         <div><span class="lab">TAX</span><span>${esc(fmtMoney(0))}</span></div>
-        <div><span class="lab">TOTAL</span><span>${esc(fmtMoney(entry.amountCents))}</span></div>
+        <div><span class="lab">TOTAL</span><span>${esc(fmtMoney(d.amountCents))}</span></div>
       </div>
     </div>
     <div class="inv-lab" style="margin-bottom:4px">Terms</div>
-    <div class="inv-terms">${invBlock(b.terms || "")}</div>`;
+    <div class="inv-terms">${invBlock(d.terms)}</div>`;
   $("#invoiceView").hidden = false;
 }
 $("#invPrint").addEventListener("click", () => window.print());
 $("#invoiceView").addEventListener("click", e => {
   if (e.target === $("#invoiceView") || e.target.hasAttribute("data-close-inv")) $("#invoiceView").hidden = true;
+});
+$("#invEdit").addEventListener("click", () => {
+  const entry = state.entries.find(x => x.id === invoiceEntryId);
+  if (!entry) return;
+  const d = invoiceData(entry);
+  $("#ieNo").value = d.no; $("#ieIssue").value = d.issue; $("#ieDue").value = d.due;
+  $("#ieDesc").value = d.desc; $("#ieAmt").value = (d.amountCents / 100);
+  $("#iePeriod").value = d.period; $("#ieClient").value = d.client;
+  $("#ieFrom").value = d.from; $("#ieTerms").value = d.terms;
+  $("#invEditor").hidden = false; $("#invMainActions").hidden = true;
+  $("#ieNo").focus();
+});
+$("#ieCancel").addEventListener("click", () => { $("#invEditor").hidden = true; $("#invMainActions").hidden = false; });
+$("#ieSave").addEventListener("click", () => {
+  const entry = state.entries.find(x => x.id === invoiceEntryId);
+  if (!entry) return;
+  const no = parseInt($("#ieNo").value.replace(/\D/g, ""), 10);
+  const cents = parseAmount($("#ieAmt").value);
+  const issue = $("#ieIssue").value, due = $("#ieDue").value;
+  if (!(no >= 1) || !cents || !issue || !due) { showToast("Number, dates, and amount all need real values 🌵"); return; }
+  entry.invoiceNo = no;
+  entry.amountCents = cents;
+  entry.date = issue;
+  entry.inv = { issue, due, desc: $("#ieDesc").value.trim().slice(0, 120), period: $("#iePeriod").value.trim().slice(0, 160) };
+  /* the tally continues from wherever she set this one */
+  if (state.billing.next <= no) state.billing.next = no + 1;
+  const p = entry.plotId ? plotById(entry.plotId) : null;
+  if (p) p.client = $("#ieClient").value.trim().slice(0, 400);
+  state.billing.from = $("#ieFrom").value.trim().slice(0, 600);
+  state.billing.terms = $("#ieTerms").value.trim().slice(0, 600);
+  markChanged(); persist(); render();
+  buildInvoice(entry);
+  showToast(`Invoice updated 🧾 next one will be ${fmtInvoiceNo(state.billing.next)}`);
 });
 
 /* ═══════════ celebrations ═══════════ */
