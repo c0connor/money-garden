@@ -516,11 +516,12 @@
     <p>Invoices and finished jobs sit as “waiting” (dashed, no flower) until you mark them paid. Canceled? Remove it — your totals never lied. The garden only grows on real money.</p>
 
     <h3>Your goal</h3>
+    <p class="soft">Private to this device — nobody else ever sees these numbers.</p>
     <div class="setrow">
-      <input id="goalInput" inputmode="decimal" aria-label="Monthly goal"> <span>monthly goal</span>
+      <input id="goalInput" inputmode="decimal" placeholder="e.g. 4,000" aria-label="Monthly goal"> <span>monthly goal</span>
     </div>
     <div class="setrow">
-      <input id="floorInput" inputmode="decimal" aria-label="Monthly expenses"> <span>baseline expenses (the tick on the bar)</span>
+      <input id="floorInput" inputmode="decimal" placeholder="e.g. 2,500" aria-label="Monthly expenses"> <span>baseline expenses (the tick on the bar)</span>
     </div>
 
     <h3>Where your numbers live</h3>
@@ -679,7 +680,7 @@ const DEFAULT_TRAYS = [
 const ORCHARD_SUBS = ["album", "film", "merch"];
 const DEFAULTS = {
   v: 2, appName: "My Money Garden", currency: "$",
-  goalCents: 500000, floorCents: 350000,
+  goalCents: 0, floorCents: 0,
   entries: [], plots: [], hours: [],
   tasks: [], trays: DEFAULT_TRAYS, suns: [], room: "garden", timer: null,
   billing: { from: "", terms: "", next: 1, dueDays: 7 },
@@ -1141,8 +1142,8 @@ function render() {
   renderShed(); renderSun(); roomSync();
   $$(".curPrefix").forEach(el => el.textContent = state.currency);
   $("#curInput").value = state.currency;
-  $("#goalInput").value = (state.goalCents / 100).toLocaleString();
-  $("#floorInput").value = (state.floorCents / 100).toLocaleString();
+  $("#goalInput").value = state.goalCents > 0 ? (state.goalCents / 100).toLocaleString() : "";
+  $("#floorInput").value = state.floorCents > 0 ? (state.floorCents / 100).toLocaleString() : "";
   [["#bFrom", state.billing.from], ["#bTerms", state.billing.terms], ["#bNext", state.billing.next], ["#bDue", state.billing.dueDays]].forEach(([sel, val]) => {
     const el = $(sel);
     if (el && document.activeElement !== el) el.value = val;
@@ -1174,9 +1175,19 @@ function renderGoal() {
   const goal = state.goalCents, floor = state.floorCents;
   const pct = goal > 0 ? Math.min(paid / goal, 1) : 0;
   const floorPct = goal > 0 ? Math.min(floor / goal, 1) : 0;
+  /* no goal yet (a fresh garden) — invite, don't assume */
+  if (goal <= 0) {
+    $("#goal").innerHTML = `
+      <div class="top">
+        <span class="now">${esc(fmtMoney(paid))} <small>harvested · last 30 days</small></span>
+        <button type="button" class="pbtn" id="setGoalBtn">Set a monthly goal 🌸</button>
+      </div>
+      <p class="word">Pick a number you're growing toward, and the line your expenses need — the garden turns them into a bar you can feel.</p>`;
+    $("#setGoalBtn").onclick = () => { $("#help").hidden = false; setTimeout(() => { $("#goalInput").focus(); $("#goalInput").scrollIntoView({ block: "center" }); }, 50); };
+    return;
+  }
   let word;
-  if (goal <= 0) word = "";
-  else if (paid >= goal) word = "Full bloom 🌸 — anything more is pure choice. Guard your time.";
+  if (paid >= goal) word = "Full bloom 🌸 — anything more is pure choice. Guard your time.";
   else if (floor > 0 && paid >= floor) word = `Expenses covered 🌱 — ${fmtMoney(goal - paid)} to full bloom`;
   else if (floor > 0) word = `${fmtMoney(floor - paid)} until your expenses are covered`;
   else word = `${fmtMoney(goal - paid)} to go`;
@@ -1751,7 +1762,9 @@ function renderShed() {
   /* ── pick mode: the morning glance — everything laid out, tap three ── */
   if (pickMode) {
     const paidWindow = sumCents(paidEntries().filter(inWindow));
-    const mix = paidWindow >= state.goalCents
+    const mix = state.goalCents <= 0
+      ? "💛 A good day has at least one heart seed — the rest is yours to call"
+      : paidWindow >= state.goalCents
       ? "🌸 Full bloom — let the heart seeds have the bench today"
       : paidWindow >= state.floorCents
         ? "🌱 Expenses covered — try 1 sustain + 2 heart 💛"
