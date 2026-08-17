@@ -354,6 +354,14 @@
   .inv-editor .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .inv-editor .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
   .inv-editor .hint { font-size: 12px; color: var(--muted); margin: -2px 2px 0; }
+  .inv-editing-hint { text-align: center; font-size: 12.5px; color: var(--muted); margin: 0 0 6px; }
+  .inv-editing-hint[hidden] { display: none; }
+  .paper .ed { outline: 1.5px dashed #c9c2b0; outline-offset: 3px; border-radius: 3px; min-width: 24px; display: inline-block; }
+  .paper .ed:empty::before { content: attr(data-ph); color: #b3ad9e; }
+  .paper .ed:focus { outline: 2px solid #4A7A47; background: #f3f8ef; }
+  .paper .ed.block { display: block; white-space: pre-wrap; }
+  .paper td.ed, .paper .inv-big.ed { display: table-cell; }
+  .paper .inv-big.ed { display: inline-block; }
   @media (max-width: 480px) { .inv-editor .row3 { grid-template-columns: 1fr 1fr; } }
   .paper { background: #fff; color: #1c1c1c; width: 100%; max-width: 620px; border-radius: 8px; padding: 38px 40px; margin: 18px auto 8px; font-size: 13px; line-height: 1.45; }
   .paper h1 { font-size: 36px; font-weight: 400; text-align: right; margin: 0 0 26px; color: #1c1c1c; letter-spacing: 1px; }
@@ -585,25 +593,17 @@
   <div style="width:100%">
     <div id="invPaper" class="paper"></div>
     <div id="invEditor" class="inv-editor" hidden>
-      <div class="row3">
-        <div><label for="ieNo">Invoice number</label><input id="ieNo" inputmode="numeric"></div>
-        <div><label for="ieIssue">Date of issue</label><input id="ieIssue" type="date"></div>
-        <div><label for="ieDue">Due date</label><input id="ieDue" type="date"></div>
-      </div>
       <div class="row2">
-        <div><label for="ieDesc">Description</label><input id="ieDesc" maxlength="120"></div>
-        <div><label for="ieAmt">Amount</label><input id="ieAmt" inputmode="decimal"></div>
+        <div><label for="ieRate">Rate per hour</label><input id="ieRate" inputmode="decimal"></div>
+        <div><label for="ieHours">Hours billed</label><input id="ieHours" inputmode="decimal"></div>
       </div>
-      <div><label for="iePeriod">Second line (work period, notes)</label><input id="iePeriod" maxlength="160" placeholder="Work for 7/18/26 - 7/31/26"></div>
-      <div><label for="ieClient">Billed to</label><textarea id="ieClient" rows="4"></textarea></div>
-      <div><label for="ieFrom">Your block</label><textarea id="ieFrom" rows="4"></textarea></div>
-      <div><label for="ieTerms">Terms</label><textarea id="ieTerms" rows="4"></textarea></div>
-      <p class="hint">Client, your block, and terms save back to the plot and your settings, so next time starts right. Number, dates, description, and amount are this invoice's own — the running tally continues from whatever number you set.</p>
+      <p class="hint" id="ieHoursHint">Changing hours or rate fixes the plot's hour log to match, so your real hourly stays honest. Amount = rate × hours.</p>
       <div class="inv-actions" style="margin:4px 0 0">
         <button class="btn" id="ieSave">Save changes</button>
         <button class="btn ghost" id="ieCancel">Cancel</button>
       </div>
     </div>
+    <p class="inv-editing-hint" id="invEditingHint" hidden>✎ Tap any line on the invoice and type. Rate and hours are below the paper.</p>
     <div class="inv-actions" id="invMainActions">
       <button class="btn" id="invPrint">Print / save as PDF 🧾</button>
       <button class="btn ghost" id="invEdit">Edit ✎</button>
@@ -952,13 +952,14 @@ function invoiceData(entry) {
   const p = entry.plotId ? plotById(entry.plotId) : null;
   const b = state.billing;
   const o = entry.inv || {};
-  let desc, unit, qty, period = "";
+  let desc, unit, qty, period = "", hours = null, rateCents = null;
   if (entry.hourIds && p) {
     const logs = state.hours.filter(h => entry.hourIds.includes(h.id));
-    const hrsSum = logs.reduce((a, h) => a + h.hours, 0) || (entry.amountCents / (p.rateCents || 1));
+    hours = logs.reduce((a, h) => a + h.hours, 0) || (entry.amountCents / (p.rateCents || 1));
+    rateCents = p.rateCents;
     const dates = logs.map(h => h.date).sort();
     if (dates.length) period = `Work for ${fmtSlash(dates[0])} - ${fmtSlash(dates[dates.length - 1])}`;
-    desc = p.name; unit = fmtMoney(p.rateCents) + "/hr"; qty = fmtHours(hrsSum);
+    desc = p.name; unit = fmtMoney(rateCents) + "/hr"; qty = fmtHours(hours);
   } else {
     const dates = p ? state.hours.filter(h => h.plotId === p.id).map(h => h.date).sort() : [];
     if (dates.length) period = `Work for ${fmtSlash(dates[0])} - ${fmtSlash(dates[dates.length - 1])}`;
@@ -969,30 +970,44 @@ function invoiceData(entry) {
     issue: o.issue || entry.date,
     due: o.due || addDaysISO(o.issue || entry.date, b.dueDays),
     desc: o.desc !== undefined ? o.desc : desc,
-    unit, qty,
+    unit: o.unit !== undefined ? o.unit : unit,
+    qty: o.qty !== undefined ? o.qty : qty,
     period: o.period !== undefined ? o.period : period,
     client: p && p.client ? p.client : "",
     from: b.from || "", terms: b.terms || "",
-    amountCents: entry.amountCents, plot: p
+    amountCents: entry.amountCents, plot: p, hours, rateCents, isHourly: hours !== null
   };
 }
-function buildInvoice(entry) {
-  invoiceEntryId = entry.id;
+let invEditing = false;
+function buildInvoice(entry, editing = false) {
+  invoiceEntryId = entry.id; invEditing = editing;
   const d = invoiceData(entry);
   const fromLines = d.from.split("\n");
-  let rows = `<tr><td>${esc(d.desc)}</td><td class="num">${esc(d.unit)}</td><td class="num">${esc(d.qty)}</td><td class="num">${esc(fmtMoney(d.amountCents))}</td></tr>`;
-  if (d.period) rows += `<tr><td colspan="4">${esc(d.period)}</td></tr>`;
-  $("#invEditor").hidden = true; $("#invMainActions").hidden = false;
+  /* in edit mode every text region becomes tap-to-type */
+  const ed = (key, text, cls = "", ph = "") => editing
+    ? `<span class="ed ${cls}" contenteditable="true" data-k="${key}" data-ph="${ph}">${esc(text)}</span>`
+    : (cls.includes("block") ? `<div class="inv-block">${invBlock(text)}</div>` : esc(text));
+  const edBlock = (key, text, ph) => editing
+    ? `<div class="ed block" contenteditable="true" data-k="${key}" data-ph="${ph}">${esc(text)}</div>`
+    : `<div class="inv-block">${invBlock(text)}</div>`;
+  let rows = `<tr><td>${ed("desc", d.desc, "", "Description")}</td><td class="num">${ed("unit", d.unit, "", "Unit cost")}</td><td class="num">${ed("qty", d.qty, "", "Qty")}</td><td class="num">${ed("amount", fmtMoney(d.amountCents))}</td></tr>`;
+  if (d.period || editing) rows += `<tr><td colspan="4">${ed("period", d.period, "", "Work for 7/18/26 - 7/31/26 (optional)")}</td></tr>`;
+  $("#invEditor").hidden = !(editing && d.isHourly);
+  $("#invEditingHint").hidden = !editing;
+  $("#invMainActions").hidden = editing;
+  if (editing && d.isHourly) { $("#ieRate").value = d.rateCents / 100; $("#ieHours").value = d.hours; }
+  if (editing && !d.isHourly) { $("#invEditor").hidden = false; $("#ieRate").parentElement.parentElement.hidden = true; $("#ieHoursHint").hidden = true; }
+  else if (editing) { $("#ieRate").parentElement.parentElement.hidden = false; $("#ieHoursHint").hidden = false; }
   $("#invPaper").innerHTML = `
     <h1>INVOICE</h1>
     <div class="inv-meta">
-      <div><div class="inv-lab">Invoice number</div>${esc(fmtInvoiceNo(d.no))}</div>
-      <div><div class="inv-lab">Date of issue</div>${esc(fmtSlash(d.issue))}
-        <div class="inv-lab" style="margin-top:4px">Due date</div>${esc(fmtSlash(d.due))}</div>
+      <div><div class="inv-lab">Invoice number</div>${editing ? `INV - <span class="ed" contenteditable="true" data-k="no" inputmode="numeric">${String(d.no).padStart(5, "0")}</span>` : esc(fmtInvoiceNo(d.no))}</div>
+      <div><div class="inv-lab">Date of issue</div>${ed("issue", fmtSlash(d.issue), "", "m/d/yyyy")}
+        <div class="inv-lab" style="margin-top:4px">Due date</div>${ed("due", fmtSlash(d.due), "", "m/d/yyyy")}</div>
     </div>
     <div class="inv-parties">
-      <div><div class="inv-lab" style="margin-bottom:4px">Billed to</div><div class="inv-block">${invBlock(d.client)}</div></div>
-      <div><div class="from-name">${esc(fromLines[0] || "")}</div><div class="inv-block">${invBlock(fromLines.slice(1).join("\n"))}</div></div>
+      <div><div class="inv-lab" style="margin-bottom:4px">Billed to</div>${edBlock("client", d.client, "Company\nContact\nAddress")}</div>
+      <div>${editing ? edBlock("from", d.from, "Your name\nAddress\nPhone\nEmail") : `<div class="from-name">${esc(fromLines[0] || "")}</div><div class="inv-block">${invBlock(fromLines.slice(1).join("\n"))}</div>`}</div>
     </div>
     <table class="inv-table">
       <tr><th>Description</th><th class="num">Unit cost</th><th class="num">Qty/hr rate</th><th class="num">Amount</th></tr>
@@ -1009,8 +1024,17 @@ function buildInvoice(entry) {
       </div>
     </div>
     <div class="inv-lab" style="margin-bottom:4px">Terms</div>
-    <div class="inv-terms">${invBlock(d.terms)}</div>`;
+    ${editing ? edBlock("terms", d.terms, "Venmo - @you\nZelle - …") : `<div class="inv-terms">${invBlock(d.terms)}</div>`}`;
   $("#invoiceView").hidden = false;
+}
+/* m/d/yyyy or m/d/yy → ISO; returns null if unreadable */
+function parseSlash(s) {
+  const m = String(s).trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/);
+  if (!m) return null;
+  let [, mo, da, yr] = m; yr = yr.length === 2 ? "20" + yr : yr;
+  const dt = new Date(+yr, +mo - 1, +da);
+  if (dt.getMonth() !== +mo - 1) return null;
+  return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`;
 }
 $("#invPrint").addEventListener("click", () => window.print());
 $("#invoiceView").addEventListener("click", e => {
@@ -1018,35 +1042,77 @@ $("#invoiceView").addEventListener("click", e => {
 });
 $("#invEdit").addEventListener("click", () => {
   const entry = state.entries.find(x => x.id === invoiceEntryId);
-  if (!entry) return;
-  const d = invoiceData(entry);
-  $("#ieNo").value = d.no; $("#ieIssue").value = d.issue; $("#ieDue").value = d.due;
-  $("#ieDesc").value = d.desc; $("#ieAmt").value = (d.amountCents / 100);
-  $("#iePeriod").value = d.period; $("#ieClient").value = d.client;
-  $("#ieFrom").value = d.from; $("#ieTerms").value = d.terms;
-  $("#invEditor").hidden = false; $("#invMainActions").hidden = true;
-  $("#ieNo").focus();
+  if (entry) buildInvoice(entry, true);
 });
-$("#ieCancel").addEventListener("click", () => { $("#invEditor").hidden = true; $("#invMainActions").hidden = false; });
+$("#ieCancel").addEventListener("click", () => {
+  const entry = state.entries.find(x => x.id === invoiceEntryId);
+  if (entry) buildInvoice(entry, false);
+});
+/* keep the hours/rate boxes and the paper's amount in sync while she types */
+function syncHourMath() {
+  const rate = parseAmount($("#ieRate").value), hrs = parseHrs($("#ieHours").value);
+  if (!rate || !hrs) return;
+  const cents = Math.round(rate * hrs);
+  const unitEl = $('#invPaper .ed[data-k="unit"]'), qtyEl = $('#invPaper .ed[data-k="qty"]'), amtEl = $('#invPaper .ed[data-k="amount"]');
+  if (unitEl) unitEl.textContent = fmtMoney(rate) + "/hr";
+  if (qtyEl) qtyEl.textContent = fmtHours(hrs);
+  if (amtEl) amtEl.textContent = fmtMoney(cents);
+  const big = $("#invPaper .inv-big"); if (big) big.textContent = fmtMoney(cents);
+  $$("#invPaper .inv-sums div span:last-child").forEach((s, i) => { if (i === 0 || i === 4) s.textContent = fmtMoney(cents); });
+}
+$("#ieRate").addEventListener("input", syncHourMath);
+$("#ieHours").addEventListener("input", syncHourMath);
 $("#ieSave").addEventListener("click", () => {
   const entry = state.entries.find(x => x.id === invoiceEntryId);
   if (!entry) return;
-  const no = parseInt($("#ieNo").value.replace(/\D/g, ""), 10);
-  const cents = parseAmount($("#ieAmt").value);
-  const issue = $("#ieIssue").value, due = $("#ieDue").value;
-  if (!(no >= 1) || !cents || !issue || !due) { showToast("Number, dates, and amount all need real values 🌵"); return; }
+  /* read what she typed on the paper; block fields keep their line breaks (contenteditable makes <br>/<div> for Enter) */
+  const g = k => {
+    const el = $(`#invPaper .ed[data-k="${k}"]`);
+    if (!el) return null;
+    const html = el.innerHTML.replace(/<div>/gi, "\n").replace(/<br\s*\/?>/gi, "\n").replace(/<\/div>/gi, "").replace(/<[^>]+>/g, "");
+    const tmp = document.createElement("textarea"); tmp.innerHTML = html;
+    return tmp.value.replace(/\u00a0/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+  };
+  const no = parseInt((g("no") || "").replace(/\D/g, ""), 10);
+  const issue = parseSlash(g("issue")), due = parseSlash(g("due"));
+  if (!(no >= 1)) { showToast("The invoice number needs to be a real number 🌵"); return; }
+  if (!issue || !due) { showToast("Dates need to look like 8/17/2026 🌵"); return; }
+  const d = invoiceData(entry);
+  const p = entry.plotId ? plotById(entry.plotId) : null;
+  let cents;
+  if (d.isHourly) {
+    const rate = parseAmount($("#ieRate").value), hrs = parseHrs($("#ieHours").value);
+    if (!rate || !hrs) { showToast("Rate and hours both need to be numbers above zero 🌵"); return; }
+    cents = Math.round(rate * hrs);
+    /* rewrite the hour log to match: rate on the plot, hours across this invoice's logs */
+    if (p && p.rateCents !== rate) p.rateCents = rate;
+    const logs = state.hours.filter(h => entry.hourIds.includes(h.id)).sort((a, b) => a.date.localeCompare(b.date));
+    if (logs.length && Math.abs(d.hours - hrs) > 0.001) {
+      /* scale every log proportionally; the last one absorbs rounding so the sum is exact */
+      const scale = d.hours > 0 ? hrs / d.hours : 1 / logs.length;
+      let running = 0;
+      logs.forEach((h, i) => {
+        if (i < logs.length - 1) { h.hours = Math.round((d.hours > 0 ? h.hours * scale : hrs * scale) * 100) / 100; running += h.hours; }
+        else h.hours = Math.round((hrs - running) * 100) / 100;
+      });
+    }
+    entry.project = `${p ? p.name : entry.project.split(" — ")[0]} — ${fmtHours(hrs)} hrs`.slice(0, 120);
+  } else {
+    cents = parseAmount(g("amount"));
+    if (!cents) { showToast("The amount needs to be a number above zero 🌵"); return; }
+  }
   entry.invoiceNo = no;
   entry.amountCents = cents;
   entry.date = issue;
-  entry.inv = { issue, due, desc: $("#ieDesc").value.trim().slice(0, 120), period: $("#iePeriod").value.trim().slice(0, 160) };
-  /* the tally continues from wherever she set this one */
+  entry.inv = { issue, due, desc: (g("desc") || "").slice(0, 120), period: (g("period") || "").slice(0, 160) };
+  if (d.isHourly) { delete entry.inv.unit; delete entry.inv.qty; }
+  else { entry.inv.unit = (g("unit") || "").slice(0, 40); entry.inv.qty = (g("qty") || "").slice(0, 40); }
   if (state.billing.next <= no) state.billing.next = no + 1;
-  const p = entry.plotId ? plotById(entry.plotId) : null;
-  if (p) p.client = $("#ieClient").value.trim().slice(0, 400);
-  state.billing.from = $("#ieFrom").value.trim().slice(0, 600);
-  state.billing.terms = $("#ieTerms").value.trim().slice(0, 600);
+  if (p) p.client = (g("client") || "").slice(0, 400);
+  state.billing.from = (g("from") || "").slice(0, 600);
+  state.billing.terms = (g("terms") || "").slice(0, 600);
   markChanged(); persist(); render();
-  buildInvoice(entry);
+  buildInvoice(entry, false);
   showToast(`Invoice updated 🧾 next one will be ${fmtInvoiceNo(state.billing.next)}`);
 });
 
