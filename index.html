@@ -199,6 +199,8 @@
   .water-row .w-hrs { width: 90px; }
   .water-row .w-date { width: 150px; }
   .hour-log { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+  .hlog-head { font-size: 11.5px; color: var(--muted); letter-spacing: .02em; margin: 2px 2px 0; }
+  .plot .editZone .hour-log { grid-column: 1 / -1; }
   .hlog-row { text-align: left; font: inherit; font-size: 13px; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; cursor: pointer; }
   .hlog-row:hover { border-color: var(--green); }
   .hlog-edit { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
@@ -392,6 +394,7 @@
   .inv-table th { text-align: left; font-size: 10px; letter-spacing: .08em; color: #8a8a8a; text-transform: uppercase; border-bottom: 2px solid #222; padding: 6px 4px; }
   .inv-table td { border-bottom: 1px solid #ddd; padding: 9px 4px; }
   .inv-table .num { text-align: right; }
+  .inv-table tr.inv-day td { border-bottom: 1px dotted #e6e6e6; padding: 5px 4px; font-size: 12px; }
   .inv-totals { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; margin-bottom: 26px; }
   .inv-big { font-size: 28px; color: #2F80DC; font-weight: 600; margin-top: 4px; }
   .inv-sums { font-size: 12.5px; min-width: 210px; }
@@ -529,7 +532,7 @@
     <p>You track two things: <b>money that landed</b> (harvests 🌻) and <b>hours you spent</b> (watering 💧). Plots connect them — each client job or company is a plot, and fee ÷ hours shows what you <i>really</i> earn per hour there.</p>
 
     <h3>The timer &amp; quarter-hours ⏱</h3>
-    <p>Tap <b>▶ Timer</b> on a plot when you start working; <b>Stop &amp; log</b> bills in quarter-hours, your rule: 5+ minutes into a quarter rounds up, under 5 rounds down (6 min → 0.25 hr · 34 min → 0.5 hr). Under 5 minutes total logs nothing. The timer keeps running even if you close the app. Tap a plot's <b>hours number</b> to see and fix every log.</p>
+    <p>Tap <b>▶ Timer</b> on a plot when you start working; <b>Stop &amp; log</b> bills in quarter-hours, your rule: 5+ minutes into a quarter rounds up, under 5 rounds down (6 min → 0.25 hr · 34 min → 0.5 hr). Under 5 minutes total logs nothing. The timer keeps running even if you close the app. Logged too much? Tap a plot's <b>edit</b> (or its hours number) — the full hour log is right there, day by day; tap any day to fix or remove it.</p>
 
     <h3>Money only counts when it's real</h3>
     <p>Invoices and finished jobs sit as “waiting” (dashed, no flower) until you mark them paid. Canceled? Remove it — your totals never lied. The garden only grows on real money.</p>
@@ -582,7 +585,7 @@
       <input id="curInput" class="tiny" maxlength="4" aria-label="Currency symbol"> <span>shown before every amount</span>
     </div>
 
-    <p class="soft" style="margin-top:20px">Grown in Christina's garden 🌱 · v2 · updated Aug 17 · works offline forever</p>
+    <p class="soft" style="margin-top:20px">Grown in Christina's garden 🌱 · v2 · updated Aug 18 · works offline forever</p>
   </div>
 </div>
 
@@ -637,6 +640,7 @@
         <div><label for="ieHours">Hours billed</label><input id="ieHours" inputmode="decimal"></div>
       </div>
       <p class="hint" id="ieHoursHint">Changing hours or rate fixes the plot's hour log to match, so your real hourly stays honest. Amount = rate × hours.</p>
+      <label class="inv-sent" id="ieDaysWrap"><input type="checkbox" id="ieDays" checked> show the day-by-day breakdown on this invoice</label>
       <div class="inv-actions" style="margin:4px 0 0">
         <button class="btn" id="ieSave">Save changes</button>
         <button class="btn ghost" id="ieCancel">Cancel</button>
@@ -1051,7 +1055,7 @@ function invoiceData(entry) {
   const p = entry.plotId ? plotById(entry.plotId) : null;
   const b = state.billing;
   const o = entry.inv || {};
-  let desc, unit, qty, period = "", hours = null, rateCents = null;
+  let desc, unit, qty, period = "", hours = null, rateCents = null, days = [];
   if (entry.hourIds && p) {
     const logs = state.hours.filter(h => entry.hourIds.includes(h.id));
     hours = logs.reduce((a, h) => a + h.hours, 0) || (entry.amountCents / (p.rateCents || 1));
@@ -1059,6 +1063,11 @@ function invoiceData(entry) {
     const dates = logs.map(h => h.date).sort();
     if (dates.length) period = `Work for ${fmtSlash(dates[0])} - ${fmtSlash(dates[dates.length - 1])}`;
     desc = p.name; unit = fmtMoney(rateCents) + "/hr"; qty = fmtHours(hours);
+    /* day-by-day breakdown: one line per work day */
+    const byDay = new Map();
+    logs.forEach(h => byDay.set(h.date, (byDay.get(h.date) || 0) + h.hours));
+    days = [...byDay.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([date, hrs]) => ({ date, hrs, cents: Math.round(hrs * rateCents) }));
   } else {
     const dates = p ? state.hours.filter(h => h.plotId === p.id).map(h => h.date).sort() : [];
     if (dates.length) period = `Work for ${fmtSlash(dates[0])} - ${fmtSlash(dates[dates.length - 1])}`;
@@ -1074,7 +1083,8 @@ function invoiceData(entry) {
     period: o.period !== undefined ? o.period : period,
     client: p && p.client ? p.client : (entry.clientText || ""),
     from: b.from || "", terms: b.terms || "",
-    amountCents: entry.amountCents, plot: p, hours, rateCents, isHourly: hours !== null
+    amountCents: entry.amountCents, plot: p, hours, rateCents, isHourly: hours !== null,
+    days, showDays: o.showDays !== false
   };
 }
 let invEditing = false;
@@ -1091,6 +1101,10 @@ function buildInvoice(entry, editing = false) {
     : `<div class="inv-block">${invBlock(text)}</div>`;
   let rows = `<tr><td>${ed("desc", d.desc, "", "Description")}</td><td class="num">${ed("unit", d.unit, "", "Unit cost")}</td><td class="num">${ed("qty", d.qty, "", "Qty")}</td><td class="num">${ed("amount", fmtMoney(d.amountCents))}</td></tr>`;
   if (d.period || editing) rows += `<tr><td colspan="4">${ed("period", d.period, "", "Work for 7/18/26 - 7/31/26 (optional)")}</td></tr>`;
+  /* the day-by-day breakdown, when there's more than one line worth of detail */
+  if (d.showDays && d.days.length > 0) {
+    rows += d.days.map(day => `<tr class="inv-day"><td style="padding-left:18px;color:#5a5a5a">${esc(fmtSlash(day.date))}</td><td class="num" style="color:#5a5a5a"></td><td class="num" style="color:#5a5a5a">${esc(fmtHours(day.hrs))}</td><td class="num" style="color:#5a5a5a">${esc(fmtMoney(day.cents))}</td></tr>`).join("");
+  }
   $("#invEditor").hidden = !(editing && d.isHourly);
   $("#invEditingHint").hidden = !editing;
   $("#invMainActions").hidden = editing;
@@ -1098,7 +1112,8 @@ function buildInvoice(entry, editing = false) {
   $("#invVoidBtn").textContent = entry.invVoid ? "un-void this invoice" : "void this invoice";
   $("#invVoidBtn").parentElement.hidden = editing;
   $("#invPaper").classList.toggle("void", !!entry.invVoid);
-  if (editing && d.isHourly) { $("#ieRate").value = d.rateCents / 100; $("#ieHours").value = d.hours; }
+  if (editing && d.isHourly) { $("#ieRate").value = d.rateCents / 100; $("#ieHours").value = d.hours; $("#ieDays").checked = d.showDays; }
+  $("#ieDaysWrap").hidden = !(editing && d.isHourly && d.days.length > 0);
   if (editing && !d.isHourly) { $("#invEditor").hidden = false; $("#ieRate").parentElement.parentElement.hidden = true; $("#ieHoursHint").hidden = true; }
   else if (editing) { $("#ieRate").parentElement.parentElement.hidden = false; $("#ieHoursHint").hidden = false; }
   $("#invPaper").innerHTML = `
@@ -1235,7 +1250,7 @@ $("#ieSave").addEventListener("click", () => {
   entry.amountCents = cents;
   entry.date = issue;
   entry.inv = { issue, due, desc: (g("desc") || "").slice(0, 120), period: (g("period") || "").slice(0, 160) };
-  if (d.isHourly) { delete entry.inv.unit; delete entry.inv.qty; }
+  if (d.isHourly) { delete entry.inv.unit; delete entry.inv.qty; entry.inv.showDays = $("#ieDays").checked; }
   else { entry.inv.unit = (g("unit") || "").slice(0, 40); entry.inv.qty = (g("qty") || "").slice(0, 40); }
   if (state.billing.next <= no) state.billing.next = no + 1;
   if (p) p.client = (g("client") || "").slice(0, 400);
@@ -1422,12 +1437,12 @@ function plotCard(p) {
       <input class="w-date" type="date" value="${todayISO()}" aria-label="Date">
       <button class="pbtn" data-act="waterSave">Water it 💧</button>
     </div>` : "";
-  let logHtml = "";
-  if (p.id === plotLogId) {
+  const hourLogHtml = () => {
     const logs = state.hours.filter(h => h.plotId === p.id)
       .sort((a, b) => b.date.localeCompare(a.date) || (b.createdAt - a.createdAt));
-    logHtml = logs.length
-      ? `<div class="hour-log">` + logs.map(h => h.id === editingHourId
+    const total = logs.reduce((a, h) => a + h.hours, 0);
+    return logs.length
+      ? `<div class="hour-log"><div class="hlog-head">Hour log · ${esc(fmtHours(total))} hrs total · tap a day to fix it</div>` + logs.map(h => h.id === editingHourId
           ? `<div class="hlog-edit" data-hour="${esc(h.id)}">
               <input class="hl-hrs" inputmode="decimal" value="${h.hours}" aria-label="Hours">
               <input class="hl-date" type="date" value="${esc(h.date)}" aria-label="Date">
@@ -1438,7 +1453,8 @@ function plotCard(p) {
           : `<button type="button" class="hlog-row" data-hour="${esc(h.id)}" data-act="editHour">${esc(fmtDay(h.date))} · ${esc(fmtHours(h.hours))} hrs${h.invoiced ? " · invoiced" : ""} <span style="float:right">✎</span></button>`
         ).join("") + `</div>`
       : `<p class="hlog-empty">No hours logged yet — the ▶ Timer or + hours will fill this.</p>`;
-  }
+  };
+  const logHtml = (p.id === plotLogId || editing) ? hourLogHtml() : "";
   const editZone = editing ? `
     <div class="editZone">
       <input class="pe-name" value="${esc(p.name)}" aria-label="Plot name">
@@ -1450,6 +1466,7 @@ function plotCard(p) {
         <button class="linky" data-act="wilt" style="margin-left:auto">cancel this job 🥀</button>
         <button class="linky" data-act="deletePlot">delete</button>
       </div>
+      ${logHtml}
     </div>` : "";
   return `<div class="plot" data-plot="${esc(p.id)}">
     <div class="head"><span class="pemoji">${emoji}</span>
